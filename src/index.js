@@ -1,11 +1,17 @@
 // import {FrozenLakeEnvViewer, CellAgentViewer, GridCellViewer} from "./MLView.js"
 // import {FrozenLake, Agent} from "./ML.js"
 
+// import { random } from "numjs";
+
 const wait = (timeToDelay) => new Promise((resolve) => setTimeout(resolve, timeToDelay))
 class util{
     array_functions = []
     static argMax(array) {
         return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
+    }
+
+    static listComp(list1, list2){
+        return JSON.stringify(list1) === JSON.stringify(list2)
     }
 
     static zeros(dims){
@@ -96,14 +102,65 @@ class util{
 
 }
 
+class Callback_0{
+    constructor(){
+        this.callbacks = []
+    }
 
+    add(callback){
+        this.callbacks.push(callback)
+    }
+
+    invoke(){
+        for(var i=0 ; i<this.callbacks.length ; i++){
+            this.callbacks[i]()
+        }
+    }
+}
+class Callback_1{
+    constructor(){
+        this.callbacks = []
+    }
+
+    add(callback){
+        this.callbacks.push(callback)
+    }
+
+    invoke(a){
+        for(var i=0 ; i<this.callbacks.length ; i++){
+            this.callbacks[i](a)
+        }
+    }
+}
+class Callback_2{
+    constructor(){
+        this.callbacks = []
+    }
+
+    add(callback){
+        this.callbacks.push(callback)
+    }
+
+    invoke(a, b){
+        for(var i=0 ; i<this.callbacks.length ; i++){
+            this.callbacks[i](a, b)
+        }
+    }
+}
 
 
 var label = ["open", "start", "hall", "wall", "goal"]
 class CellAgentViewer{
     constructor(){
+        this.mode = "background_color_change"
         this.element = this.createElement()
         this.setType("explorer");
+
+        this.mode_init(this.mode)
+        this.AgentShowDelegator = AgentShowDelegatorFactory.make(this)
+    }
+    mode_init(){
+
     }
     createElement(){
         var element = document.createElement("div");
@@ -124,9 +181,49 @@ class CellAgentViewer{
         return this.element;
     }
     show(flag){
-        this.element.style.visibility = flag? "":"hidden"
+        this.AgentShowDelegator.show(flag)
+    }
+
+}
+
+class AgentShowDelegator{
+    constructor(agentView){
+        this.agentView = agentView
+    }
+    show(flag){
+        console.log("미구현")
     }
 }
+
+class AgentShowDelegatorFactory{
+    static make(agentElement){
+        // return new AgentShowByVisibility(agentElement)
+        return new AgentShowByColor(agentElement)
+    }
+}
+
+class AgentShowByVisibility extends AgentShowDelegator{
+    constructor(agentView){
+        super(agentView)
+    }
+    show(flag){
+        this.agentView.element.style.visibility = flag? "":"hidden"
+    }
+}
+class AgentShowByColor extends AgentShowDelegator{
+    constructor(agentView){
+        super(agentView)
+        this.backgroundColor = "transparent"
+        this.showColor = "Darkcyan"
+    }
+    show(flag){
+        
+        this.agentView.element.style.backgroundColor = flag ? this.showColor:this.backgroundColor;
+        
+    }
+}
+
+
 class GridCellViewer{
 
 
@@ -146,6 +243,24 @@ class GridCellViewer{
         var innerItem = element.getElementsByClassName("inner_item")[0];
         var agents = [] 
         var position = [20, 50, 80]
+        for (var y=0 ; y<3 ; y++){
+            for (var x=0 ; x<3 ; x++){
+                var agent = new CellAgentViewer();
+                agent.getElement().style.top = `${position[y]}%`
+                agent.getElement().style.left = `${position[x]}%`
+                agents.push(agent);
+                innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
+            }
+        }
+        for (var y=0 ; y<3 ; y++){
+            for (var x=0 ; x<3 ; x++){
+                var agent = new CellAgentViewer();
+                agent.getElement().style.top = `${position[y]}%`
+                agent.getElement().style.left = `${position[x]}%`
+                agents.push(agent);
+                innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
+            }
+        }
         for (var y=0 ; y<3 ; y++){
             for (var x=0 ; x<3 ; x++){
                 var agent = new CellAgentViewer();
@@ -259,49 +374,146 @@ class FrozenLakeEnvViewer{
         }
     }
 }
+class AgentGrupe{
+    static default_value = 0.01
+
+    constructor(states, actions){
+        this.states = states
+        this.actions = actions
+        this.agents = []
+        this.total_step = 0
+        this.default_value = 0.01
+        this.tau_table = util.zeros([states.length, actions.length])
+        this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
+
+        this.model = new Model()
+
+        this.after_update_q_value_callbacks = new Callback_2()
+        this.after_step_callback = new Callback_0()
+        this.goal_callback = new Callback_0()
+        this.hall_callback = new Callback_0()
+    }
+
+    isValidAgnet(agent){
+        return util.listComp(agent.states, this.states) && util.listComp(agent.actions, this.actions) 
+    }
+
+    addAgent(agent){
+        if(this.isValidAgnet(agent)){
+            agent.set_group(this) // 꼼수.. agent랑 동일한 값들을 따로 정의하기 귀찮
+            this.agents.push(agent)
+            agent.after_update_q_value_callbacks.add((state, updated_q_value) => {this.after_update_q_value_callbacks.invoke(state, updated_q_value)})
+            agent.after_step_callback.add(() => this.after_step_callback.invoke())
+            agent.goal_callback.add(() => this.goal_callback.invoke())
+            agent.hall_callback.add(() => this.hall_callback.invoke())
+        }else{
+            throw "invalid agent!!! check the states and actions"
+        }
+    }
+
+    getAgent(idx){
+        return this.agents[idx]
+    }
+}
+
+class Model{
+
+    constructor(){
+        this.max_size = 10000
+        this.samples = []
+    }
+
+    update(state, action, reward, next_state){
+        if (this.max_size < this.samples.length){
+            this.samples.shift()
+        }
+        this.samples.push([state, action, reward, next_state])
+    }
+
+    get_sample(){
+        return util.randomChoice(this.samples)
+    }
+}
 
 class Agent{
-    static tau = []
-    static share_model = []
-    // static share_q_values = {}
-    constructor(states, actions, epsilon = 0.1, step_size = 0.1, gamma = 0.95, kappa = 0.001){
+    constructor(states, actions, epsilon = 0.1, step_size = 1, gamma = 0.99, kappa = 0.0001){
+        // group & sharing option
+        this.group = null
+        this.tau_table_sharing = true
+        this.q_value_table_sharing = true
+        this.model_sharing = true
+
+
         this.states = states
         this.actions = actions
         this.epsilon = epsilon
         this.step_size = step_size
         this.gamma = gamma
-        this.q_values = util.zeros([states.length, actions.length])
+        // this.q_values = util.zeros([states.length, actions.length])
         this.past_state = null
         this.past_action = null
         this.kappa = kappa
-        this.tau = util.zeros([states.length, actions.length])
         this.use_curiosity = true
         this.visit_state = []
-        this.curiosity_reward = 0.01
-        this.group = null
-        this.model = []
+        this.curiosity_reward = 0
+        
+        this.model = new Model()
+        this.planning_step = 100
+        this.finished = true
 
-        // if(this.null != null){
+        this.default_reward = -0.001
+        this.default_value = 0.01
+        this.tau_table = util.zeros([states.length, actions.length])
+        this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
 
-        //     if(! (this.group in Agent.share_q_values)){
-        //         Agent.share_q_values[this.group] = util.zeros([states.length, actions.length])
-        //     }
-        // }
+        this.after_update_q_value_callbacks = new Callback_2()
+        this.after_step_callback = new Callback_0()
+        this.goal_callback = new Callback_0()
+        this.hall_callback = new Callback_0()
+        
+        this.total_step = 0
+
     }
-    report(state, action, reward, next_state){
-        share_model.push([state, action, reward, next_state])
 
+    set_group(group){
+        this.group = group
+    }
+
+    get_tau_table(){
+        if(this.group != null && this.tau_table_sharing){
+            return this.group.tau_table
+        }else{
+            return this.tau_table
+        }
+    }
+
+    get_q_value_table(){
+        if(this.group != null && this.q_value_table_sharing){
+            return this.group.q_value_table
+        }else{
+            return this.q_value_table
+        }
+    }
+
+    get_model(){
+        if(this.group != null && this.model_sharing){
+            return this.group.model
+        }else{
+            return this.model
+        }
     }
 
     getQValueForState(state){
         // return this.q_values[state]
 
-        var tau = [...this.tau[state]]
+        var tau = [...this.get_tau_table()[state]]
+        
         tau = util.vSquare(tau, 0.5)
         tau = util.vConstMul(tau, this.kappa)
-        return util.vAdd(this.q_values[state], tau)
+
+        return util.vAdd(this.get_q_value_table()[state], tau)
     }
-    getValueMap(){
+    getValueMap(mode = "greedy"){
         let valueMap = []
         for(var i=0 ; i<this.states.length; i++){
             // var qValues = this.q_values[this.states[i]]
@@ -311,15 +523,14 @@ class Agent{
         }
         return valueMap
     }
-    choose_action(state, mode = "weight"){
+    choose_action(state, mode = "greedy"){
         if (Math.random() < this.epsilon){
-            console.log("epsilon")
             return util.randomChoice(this.actions)
         }else{
             switch(mode){
-            case "gridy":
+            case "greedy":
                 var values = this.getQValueForState(state)
-                console.log("values: ", values)
+                
                 var max_value = Math.max(...values)
                 var max_index_list = []
                 for(var i=0 ; i<values.length ; i++){
@@ -332,7 +543,7 @@ class Agent{
             case "weight":
                 var values = this.getQValueForState(state)
                 var min_value = Math.min(...values)
-                values = util.vConstAdd(values, min_value)
+                values = util.vConstAdd(values, -min_value)
 
                 
                 var sum = values.reduce((a, b) => a+b, 0)
@@ -341,7 +552,6 @@ class Agent{
                 }
                 values = util.vConstMul(values, 1/sum)
                 var p = Math.random()
-                console.log(state, values)
                 for(var i=0 ; i<values.length ; i++){
                     if(p < values[i]){
                         return this.actions[i]
@@ -355,29 +565,30 @@ class Agent{
 
         }
     }
-
-
     
     start(state){
+        this.finished = false
         this.past_state = state;
         this.past_action = this.choose_action(state);
         return this.past_action;
     }
     
     step(state, reward){
-        this.update_model(this.past_state, this.past_action, reward, state)
-        this.planning(100)
+        reward += this.default_reward//*(Math.floor(Agent.total_step/1000))
+        this.get_model().update(this.past_state, this.past_action, reward, state)
+        this.planning(this.planning_step)
 
         if(this.use_curiosity){
             var query = `${state}, ${this.past_action}`
             if(! (query in this.visit_state)){
-                reward += this.curiosity_reward
+                if(Math.random() < 2)
+                    reward += this.curiosity_reward
                 this.visit_state.push(query)
             }
         }
 
         // update value
-        this.update_q(this.past_state, this.past_action, reward, state)
+        this.update_q_value(this.past_state, this.past_action, reward, state)
 
         // select action
         var action = this.choose_action(state)
@@ -391,42 +602,45 @@ class Agent{
         // update tau
         this.updateTau(this.past_state, this.past_action)
 
+        this.total_step += 1
+        this.after_step_callback.invoke()
         // return action
         return this.past_action
     }
 
     updateTau(state, action){
-        for(var i=0 ; i<this.tau.length ; i++){
-            this.tau[i] = util.vAdd(this.tau[i], util.ones([this.tau[i].length]))
+        var tau_table = this.get_tau_table()
+        for(var i=0 ; i<tau_table.length ; i++){
+            tau_table[i] = util.vAdd(tau_table[i], util.ones([tau_table[i].length]))
         }
-        this.tau[state][action] = 0
+        tau_table[state][action] = 0
     }
     
-    update_q(state, action, reward, next_state){
-        var next_return = (next_state == -1) ? 0 : this.gamma*Math.max(...this.q_values[next_state])
+    update_q_value(state, action, reward, next_state){
+        var next_return = (next_state == -1) ? 0 : this.gamma*Math.max(...this.get_q_value_table()[next_state])
         var cur_return = reward + next_return
-        var cur_value = this.q_values[state][action]
+        var cur_value = this.get_q_value_table()[state][action]
         var delta = cur_return - cur_value
-        this.q_values[state][action] += delta
+        this.get_q_value_table()[state][action] += this.step_size*delta
+
+        this.after_update_q_value_callbacks.invoke(state, this.get_q_value_table()[state][action])
     }
 
     end(reward, state){
-        this.update_q(this.past_state, this.past_action, reward, state)
+        this.update_q_value(this.past_state, this.past_action, reward, state)
         this.past_state = state
-        // this.updateTau(this.past_state, this.past_action)
+        this.finished = true
+        this.total_step += 1
+        this.after_step_callback.invoke()
     }
 
-    update_model(state, action, reward, next_state){
-        this.model.push([state, action, reward, next_state])
-    }
 
     planning(step_num){
         for(var i=0 ; i<step_num ; i++){
             var state, action, reward, next_state
-            [state, action, reward, next_state] = util.randomChoice(this.model)
-            this.update_q(state, action, reward, next_state)
+            [state, action, reward, next_state] = this.get_model().get_sample()
+            this.update_q_value(state, action, reward, next_state)
         }
-        
     }
 }
 
@@ -436,7 +650,7 @@ class FrozenLake{
         this.state_list = util.range(0, map_size*map_size)
         this.action_list = util.range(0, 4)
         
-        this.frozen_ratio = 0.9
+        this.frozen_ratio = 0.7
         this.map = this.generateRandomMap(this.map_size, this.frozen_ratio)
     }
 
@@ -581,53 +795,78 @@ class FrozenLake{
 
 
 class Operator{
-    constructor(map_size){
-        this.agent_num = 9
+    constructor(map_size, agent_num){
+        
+        this.agent_num = agent_num
         this.body = document.body;
         this.map_size = map_size
         this.env = new FrozenLake(map_size)
+        this.informationViewer = new InformationViewer();
+
+        
+        // agentGroup
+        this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
+        this.agentGroup.goal_callback.add(() => this.informationViewer.goal += 1)
+        this.agentGroup.hall_callback.add(() => this.informationViewer.hall += 1)
+        this.agentGroup.after_step_callback.add(() => this.informationViewer.step += 1)
+
+
         this.agents = []
         for(var i=0 ; i<this.agent_num ; i++){
-            this.agents.push(new Agent(this.env.getStates(), this.env.getActions()))
+            var agent = new Agent(this.env.getStates(), this.env.getActions())
+            this.agents.push(agent)
+            this.agentGroup.addAgent(agent)
+            agent.q_value_update_callback = (state, updated_value) => {
+                var x, y
+                [x, y] = this.env.state_to_coordinate(state)
+                this.env_view.setValue(x, y,  Math.floor(updated_value*100)/100)
+            }
         }        
-        this.env_view = new FrozenLakeEnvViewer(map_size, map_size, 100);
+        this.env_view = new FrozenLakeEnvViewer(map_size, map_size, 50);
         this.env_view.applyMap(this.env.getMap())
         this.env_view.setRewardMap(this.env.getRewardMap())
         this.body.appendChild(this.env_view.getElement())
+        this.body.appendChild(this.informationViewer.getElement())
     }
 
     one_step(agent_idx){
         // agent 지우기
-        let x, y
-        [x, y] = this.env.state_to_coordinate(this.agents[agent_idx].past_state)
-        this.env_view.showAgent(x, y, agent_idx, false)
-        
-    
-        // agent 액션 수행
-        let state, reward, done
-        [state, reward, done] = this.env.step(this.agents[agent_idx].past_state, this.agents[agent_idx].past_action)
-    
-        // agent 그리기
-        let nx, ny
-        [nx, ny] = this.env.state_to_coordinate(state)
-        this.env_view.showAgent(nx, ny, agent_idx, true)
-        
-        
-        var valueMap = this.agents[agent_idx].getValueMap()
-        for(var i=0 ; i<valueMap.length ; i++){
+        var agent = this.agents[agent_idx]
+        if(agent.finished){
+            this.initAgent(agent_idx)
+        }else{
             let x, y
-            [x, y] = this.env.state_to_coordinate(i)
-            this.env_view.setValue(x, y, valueMap[i])
+            [x, y] = this.env.state_to_coordinate(agent.past_state)
+            this.env_view.showAgent(x, y, agent_idx, false)
+            
+        
+            // agent 액션 수행
+            let state, reward, done
+            [state, reward, done] = this.env.step(agent.past_state, agent.past_action)
+        
+            // agent 그리기
+            let nx, ny
+            [nx, ny] = this.env.state_to_coordinate(state)
+            this.env_view.showAgent(nx, ny, agent_idx, true)
+            
+            
+            var valueMap = agent.getValueMap()
+            for(var i=0 ; i<valueMap.length ; i++){
+                let x, y
+                [x, y] = this.env.state_to_coordinate(i)
+                this.env_view.setValue(x, y, valueMap[i])
+            }
+    
+            // 끝난 경우
+            if (done == true){
+                agent.end(reward, state)
+                return true
+            }else{
+                agent.step(state, reward)
+                return false
+            }
         }
 
-        // 끝난 경우
-        if (done == true){
-            this.agents[agent_idx].end(reward, state)
-            return true
-        }else{
-            this.agents[agent_idx].step(state, reward)
-            return false
-        }
     }
 
     async one_episode(agent_idx, freq){
@@ -665,6 +904,17 @@ class Operator{
         this.env_view.showAgent(0, 0, agent_idx, true)
     }
 
+    async all_agent_step(freq){
+        while(true){
+            // for(var i=0 ; i<this.agent_num ; i++){
+            for(var i=0 ; i<this.agent_num ; i++){
+                await this.one_step(i)
+                await wait(freq)
+                // break
+            }
+            
+        }
+    }
     async do(){
         while(true){
             await this.n_episode(5, 0, 1)
@@ -678,8 +928,6 @@ class Operator{
     }
 }
 
-
-
 // async function test(){
 //     console.log("hello")
 //     await wait(1000)
@@ -688,8 +936,8 @@ class Operator{
 // test()
 // wait(1000).then(() => console.log("hello2"))
 
-let operator = new Operator(20)
-operator.do()
+
+
 
 // async function test(){
 //     operator.initAgent(0)
@@ -709,6 +957,76 @@ operator.do()
 //     operator.initAgent(0)
 //     await operator.one_episode(1)
 // }
+
+
+
+class InformationViewer{
+    constructor(){
+        this.element = this.createElement()
+
+        this._goal = 0
+        this._hall = 0
+        this._step = 0
+
+        this.update()
+    }
+
+    getElement(){
+        return this.element
+    }
+
+    get step(){return this._step}
+    set step(value){
+        this._step = value
+        this.update()
+    }
+    
+    get hall(){return this._hall}
+    set hall(value){
+        this._hall = value
+        this.update()
+    }
+
+    get goal(){return this._goal}
+    set goal(value){
+        this._goal = value
+        this.update()
+        if(value == 1){
+            console.log(`first goal in step ${this.step}`)
+        }
+    }
+
+    update(){
+        this.element.innerHTML = `
+        <div>Step: ${this.step}</div>
+        <div>Goal: ${this.goal}</div>
+        <div>Hall: ${this.hall}</div>
+    `
+    }
+
+    createElement(){
+        var element = document.createElement("div");
+        return element}
+}
+
+
+
+
+
+
+var operator
+document.getElementById("initialize_button").addEventListener('click',() => {
+    if(operator != null){
+        operator.env_view.element.remove()
+        operator.informationViewer.element.remove()
+    }
+    operator = new Operator(30, 27)
+})
+
+
+document.getElementById("continue_button").addEventListener('click',() => {
+    operator.all_agent_step(1)
+})
 
 document.getElementById("one_episode_button").addEventListener('click',() => {operator.initAgent(0)
     operator.one_episode(1000)});
