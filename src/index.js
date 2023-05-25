@@ -226,11 +226,31 @@ class AgentShowByColor extends AgentShowDelegator{
 
 class GridCellViewer{
 
+    static BASIT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    static CIRCLE_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8]
+    static MAX_AGENT_NUM = 9
+    constructor(x, y){
 
-    constructor(){
         [this.element, this.agents] = this.createNode()
+        this.x = x
+        this.y = y
         this.setState("open")
-        this.showAllAgent(false)
+        // this.showAllAgent(false)
+        this.agentNum = 0;
+
+
+        this.order = GridCellViewer.CIRCLE_ORDER
+
+        this.click_callback = new Callback_2()
+
+        
+        this.element.addEventListener("click", () => {this.click_callback.invoke(this.x, this.y)
+            console.log(this.x, this.y)
+        }, false)
+        this.setArrow("up", 0.5)
+        this.setArrow("down", 0.5)
+        this.setArrow("left", 0.5)
+        this.setArrow("right", 0.5)
     }
 
     createNode(){
@@ -239,7 +259,12 @@ class GridCellViewer{
         element.innerHTML = `   <div class = "inner_item">
                                     <div class="value">0.0</div>
                                     <div class="reward">r=0.0</div>
+                                    <div class="left_arrow"></div>
+                                    <div class="right_arrow"></div>
+                                    <div class="up_arrow"></div>
+                                    <div class="down_arrow"></div>
                                 <div>`;
+
         var innerItem = element.getElementsByClassName("inner_item")[0];
         var agents = [] 
         var position = [20, 50, 80]
@@ -250,26 +275,27 @@ class GridCellViewer{
                 agent.getElement().style.left = `${position[x]}%`
                 agents.push(agent);
                 innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
+                agent.show(false)
             }
         }
-        for (var y=0 ; y<3 ; y++){
-            for (var x=0 ; x<3 ; x++){
-                var agent = new CellAgentViewer();
-                agent.getElement().style.top = `${position[y]}%`
-                agent.getElement().style.left = `${position[x]}%`
-                agents.push(agent);
-                innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
-            }
-        }
-        for (var y=0 ; y<3 ; y++){
-            for (var x=0 ; x<3 ; x++){
-                var agent = new CellAgentViewer();
-                agent.getElement().style.top = `${position[y]}%`
-                agent.getElement().style.left = `${position[x]}%`
-                agents.push(agent);
-                innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
-            }
-        }
+        // for (var y=0 ; y<3 ; y++){
+        //     for (var x=0 ; x<3 ; x++){
+        //         var agent = new CellAgentViewer();
+        //         agent.getElement().style.top = `${position[y]}%`
+        //         agent.getElement().style.left = `${position[x]}%`
+        //         agents.push(agent);
+        //         innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
+        //     }
+        // }
+        // for (var y=0 ; y<3 ; y++){
+        //     for (var x=0 ; x<3 ; x++){
+        //         var agent = new CellAgentViewer();
+        //         agent.getElement().style.top = `${position[y]}%`
+        //         agent.getElement().style.left = `${position[x]}%`
+        //         agents.push(agent);
+        //         innerItem.insertBefore(agent.getElement(), innerItem.firstChild)
+        //     }
+        // }
         return [element, agents];
     }
     setValue(value){
@@ -280,6 +306,48 @@ class GridCellViewer{
     }
     setReward(reward){
         this.element.getElementsByClassName("reward")[0].innerHTML = `r=${reward}`
+    }
+
+    setQValueArrow(q_value){
+        
+        var min = Math.min(...q_value)
+        
+        q_value = util.vSub(q_value, util.ndarray([q_value.length], min))
+        var sum = q_value.reduce((a, b) => a+b, 0)
+        if(sum == 0){
+            q_value = [0, 0, 0, 0]
+        }else{
+            q_value = util.vConstMul([...q_value], (1/sum))
+        }
+        console.log("state", this.x, this.y, q_value) 
+        console.log(q_value)
+
+        this.setArrow("up", q_value[0])
+        this.setArrow("down", q_value[1])
+        this.setArrow("left", q_value[2])
+        this.setArrow("right", q_value[3])
+    }
+
+    setArrow(direction, ratio){
+
+
+        switch(direction){
+        case "up":
+            this.element.getElementsByClassName("up_arrow")[0].style.top = `${50*(1-ratio)}%`
+            this.element.getElementsByClassName("up_arrow")[0].style.height = `${50*ratio}%`
+            break;
+        case "down":
+            this.element.getElementsByClassName("down_arrow")[0].style.height = `${50*ratio}%`
+            break;
+        case "left":
+            this.element.getElementsByClassName("left_arrow")[0].style.left = `${50*(1-ratio)}%`
+            this.element.getElementsByClassName("left_arrow")[0].style.width = `${50*ratio}%`
+            break;
+        case "right":
+            this.element.getElementsByClassName("right_arrow")[0].style.width = `${50*(ratio)}%`
+            break;
+        }
+        
     }
 
     getElement(){
@@ -308,12 +376,33 @@ class GridCellViewer{
 
         }
     }
-    showAllAgent(flag){
-        this.agents.forEach((agent) => agent.show(flag));
+    // showAllAgent(flag){
+    //     this.agents.forEach((agent) => agent.show(flag));
+    // }
+    // showAgent(idx, flag){
+    //     this.agents[idx].show(flag);
+    // }
+
+    getAgent(idx){
+        return this.agents[this.order[idx]]
     }
-    showAgent(idx, flag){
-        this.agents[idx].show(flag);
+    agentEnter(){
+        this.agentNum += 1
+        
+        if(this.agentNum <= GridCellViewer.MAX_AGENT_NUM){
+            this.getAgent(this.agentNum-1).show(true)
+        }
     }
+    agentExit(){
+        this.agentNum -= 1
+        if(this.agentNum < 0){
+            this.agentNum = 0
+        }
+        if(this.agentNum < GridCellViewer.MAX_AGENT_NUM){
+            this.getAgent(this.agentNum).show(false)
+        }
+    }
+
 }
 
 
@@ -325,6 +414,9 @@ class FrozenLakeEnvViewer{
         [this.element, this.cellMap] = this.createElement(width, height)
 
         this.resizeCell(cellSize)
+
+        this.click_callback = new Callback_2()
+
          
     }
 
@@ -343,7 +435,8 @@ class FrozenLakeEnvViewer{
         var map = Array.from(Array(height), () => new Array(width))
         for (var y=0 ; y<height ; y++){
             for (var x=0 ; x<width ; x++){
-                var gridCell = new GridCellViewer()
+                var gridCell = new GridCellViewer(x, y)
+                gridCell.click_callback.add((x, y) => this.click_callback.invoke(x, y))
                 element.appendChild(gridCell.getElement())     
                 map[y][x] = gridCell;
             }    
@@ -358,10 +451,19 @@ class FrozenLakeEnvViewer{
         }
     }
     showAgent(x, y, agent_idx, flag){
-        this.cellMap[y][x].showAgent(agent_idx, flag)
+
+        if(flag == true){
+            this.cellMap[y][x].agentEnter()
+        }else{
+            this.cellMap[y][x].agentExit()
+        }
+        // showAgent(agent_idx, flag)
     }
     setValue(x, y, value){
         this.cellMap[y][x].setValue(value)
+    }
+    setQvalues(x, y, q_values){
+        this.cellMap[y][x].setQValueArrow(q_values)
     }
     setReward(x, y, reward){
         this.cellMap[y][x].setReward(reward)
@@ -386,12 +488,15 @@ class AgentGrupe{
         this.tau_table = util.zeros([states.length, actions.length])
         this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
 
-        this.model = new Model()
+        this.model = new Model(states, actions)
+        this.memory = new Memory()
 
         this.after_update_q_value_callbacks = new Callback_2()
         this.after_step_callback = new Callback_0()
         this.goal_callback = new Callback_0()
         this.hall_callback = new Callback_0()
+        this.first_state = new Callback_1()
+        this.first_state_action = new Callback_2()
     }
 
     isValidAgnet(agent){
@@ -406,6 +511,8 @@ class AgentGrupe{
             agent.after_step_callback.add(() => this.after_step_callback.invoke())
             agent.goal_callback.add(() => this.goal_callback.invoke())
             agent.hall_callback.add(() => this.hall_callback.invoke())
+            agent.first_state_action.add((state, action) => this.first_state_action.invoke(state, action))
+            agent.first_state.add((state) => this.first_state.invoke(state))
         }else{
             throw "invalid agent!!! check the states and actions"
         }
@@ -415,50 +522,124 @@ class AgentGrupe{
         return this.agents[idx]
     }
 }
+class GausianModel{
+    constructor(){
+        this.mean = 0;
+        this.variance = 1;
+        this.update_ratio = 0.3
+    }   
+
+    update(value){
+        this.mean += this.update_ratio*(value - this.mean)
+        this.variance += this.update_ratio*((value - this.mean)**2 - this.variance)
+    }
+
+    get_value(){
+        return this.mean;
+        // gaussian은 나중에 library로 사용(일단은 편차가 없으니깐..)
+        // this.mean + this.update_ratio
+    }
+}
 
 class Model{
 
-    constructor(){
-        this.max_size = 10000
+    constructor(states, actions){
+        this.max_size = 500
         this.samples = []
+        this.reward_model_table = util.ndarray([states.length, actions.length], 0)
+        for(var state=0 ; state<states.length ; state++){
+            for(var action=0 ; action<actions.length ; action++){
+                this.reward_model_table[state][action] = new GausianModel()
+            }
+        }
+    }
+
+    reward_update(state, action, reward){
+        this.reward_model_table[state][action].update(reward)
     }
 
     update(state, action, reward, next_state){
+        this.reward_update(state, action, reward)
+        if (this.max_size < this.samples.length){
+            this.samples.shift()
+        }
+        this.samples.push([state, action, next_state])
+    }
+
+    update_old(state, action, reward, next_state){
         if (this.max_size < this.samples.length){
             this.samples.shift()
         }
         this.samples.push([state, action, reward, next_state])
     }
 
-    get_sample(){
+    get_sample_old(){
         return util.randomChoice(this.samples)
+    }
+
+    get_sample(){
+        var state, action, next_state
+        [state, action, next_state] = util.randomChoice(this.samples)
+        var reward = this.reward_model_table[state][action].get_value()
+        return [state, action, reward, next_state]
     }
 }
 
+ class Memory{
+    constructor(){
+        this.state_memory = new Set()
+        this.action_memory = new Set()
+    }
+
+    state(state){
+        `state를 방문했다고 알리면 기존에 방문했던 곳인지 체크하고 기록`
+        if(this.state_memory.has(state)){ 
+            return false
+        }else{
+            this.state_memory.add(state)
+            return true
+        }
+
+    }
+
+    state_action(state, action){
+        `state-action 조합을 알리면 기존에 수행했었는지 체크하고 기록`
+        var key = `${state}, ${action}`
+        if(this.action_memory.has(key)){
+            return false
+        }else{
+            this.action_memory.add(key)
+            return true
+        }
+    }
+ }
+
 class Agent{
-    constructor(states, actions, epsilon = 0.1, step_size = 1, gamma = 0.99, kappa = 0.0001){
+    constructor(states, actions, epsilon = 0.3, step_size = 1, gamma = 0.99, kappa = 0.001){
         // group & sharing option
         this.group = null
         this.tau_table_sharing = true
         this.q_value_table_sharing = true
         this.model_sharing = true
+        this.memory_sharing = true
 
+        this.epsilon = Math.random()*0.1
+        this.kappa = Math.random()*0.001
 
         this.states = states
         this.actions = actions
-        this.epsilon = epsilon
         this.step_size = step_size
         this.gamma = gamma
         // this.q_values = util.zeros([states.length, actions.length])
         this.past_state = null
         this.past_action = null
-        this.kappa = kappa
-        this.use_curiosity = true
+    
+        this.use_curiosity = (Math.random() < 0.5)
         this.visit_state = []
-        this.curiosity_reward = 0
+        this.curiosity_reward = Math.random()*0.01
         
-        this.model = new Model()
-        this.planning_step = 100
+        this.model = new Model(states, actions)
+        this.planning_step = 10
         this.finished = true
 
         this.default_reward = -0.001
@@ -470,7 +651,11 @@ class Agent{
         this.after_step_callback = new Callback_0()
         this.goal_callback = new Callback_0()
         this.hall_callback = new Callback_0()
+        this.first_state = new Callback_1()
+        this.first_state_action = new Callback_2()
         
+        this.memory = new Memory()
+
         this.total_step = 0
 
     }
@@ -513,7 +698,7 @@ class Agent{
 
         return util.vAdd(this.get_q_value_table()[state], tau)
     }
-    getValueMap(mode = "greedy"){
+    getValueMap(mode = "uniform"){
         let valueMap = []
         for(var i=0 ; i<this.states.length; i++){
             // var qValues = this.q_values[this.states[i]]
@@ -523,23 +708,11 @@ class Agent{
         }
         return valueMap
     }
-    choose_action(state, mode = "greedy"){
+    choose_action(state, mode = "uniform"){
         if (Math.random() < this.epsilon){
-            return util.randomChoice(this.actions)
-        }else{
             switch(mode){
-            case "greedy":
-                var values = this.getQValueForState(state)
-                
-                var max_value = Math.max(...values)
-                var max_index_list = []
-                for(var i=0 ; i<values.length ; i++){
-                    if (values[i] == max_value){
-                        max_index_list.push(i)
-                    } 
-                }
-                var index = util.randomChoice(max_index_list)
-                return this.actions[index]
+            case "uniform":
+                return util.randomChoice(this.actions)
             case "weight":
                 var values = this.getQValueForState(state)
                 var min_value = Math.min(...values)
@@ -562,7 +735,19 @@ class Agent{
                 console.log("선택 못함")
                 return 0
             }
-
+            
+        }else{
+            var values = this.getQValueForState(state)
+            
+            var max_value = Math.max(...values)
+            var max_index_list = []
+            for(var i=0 ; i<values.length ; i++){
+                if (values[i] == max_value){
+                    max_index_list.push(i)
+                } 
+            }
+            var index = util.randomChoice(max_index_list)
+            return this.actions[index]
         }
     }
     
@@ -573,19 +758,36 @@ class Agent{
         return this.past_action;
     }
     
+    get_memory(){
+        if(this.group != null && this.memory_sharing){
+            return this.group.memory
+        }else{
+            return this.memory
+        }
+    }
+
     step(state, reward){
         reward += this.default_reward//*(Math.floor(Agent.total_step/1000))
+
+        var memory = this.get_memory()
+        if(memory.state_action(state, this.past_action)){ // first state action??
+            if(this.use_curiosity){
+                // reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
+                // reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
+            }
+            this.first_state_action.invoke(state, this.past_action)
+        }
+
+        if(memory.state(state)){ // first visit??
+            this.first_state.invoke(state)
+            if(this.use_curiosity){
+                // reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
+                reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
+            }
+        }        
+        
         this.get_model().update(this.past_state, this.past_action, reward, state)
         this.planning(this.planning_step)
-
-        if(this.use_curiosity){
-            var query = `${state}, ${this.past_action}`
-            if(! (query in this.visit_state)){
-                if(Math.random() < 2)
-                    reward += this.curiosity_reward
-                this.visit_state.push(query)
-            }
-        }
 
         // update value
         this.update_q_value(this.past_state, this.past_action, reward, state)
@@ -616,18 +818,18 @@ class Agent{
         tau_table[state][action] = 0
     }
     
-    update_q_value(state, action, reward, next_state){
+    update_q_value(state, action, reward, next_state, end = false){
         var next_return = (next_state == -1) ? 0 : this.gamma*Math.max(...this.get_q_value_table()[next_state])
         var cur_return = reward + next_return
         var cur_value = this.get_q_value_table()[state][action]
         var delta = cur_return - cur_value
         this.get_q_value_table()[state][action] += this.step_size*delta
 
-        this.after_update_q_value_callbacks.invoke(state, this.get_q_value_table()[state][action])
+        this.after_update_q_value_callbacks.invoke(state, this.get_q_value_table()[state])
     }
 
     end(reward, state){
-        this.update_q_value(this.past_state, this.past_action, reward, state)
+        this.update_q_value(this.past_state, this.past_action, reward, -1)
         this.past_state = state
         this.finished = true
         this.total_step += 1
@@ -652,6 +854,34 @@ class FrozenLake{
         
         this.frozen_ratio = 0.7
         this.map = this.generateRandomMap(this.map_size, this.frozen_ratio)
+    }
+
+    get_type(state){
+        var x, y
+        [x, y] = this.state_to_coordinate(state)
+        return this.map[y][x]
+    }
+    modify(state, type){
+        if(!["H", "F"].includes(type)){
+            console.log(`${type} is invalid state type`)
+            return false
+        }else{
+            
+            var x, y
+            [x, y] = this.state_to_coordinate(state)
+            
+            var origin_type = this.map[y][x]
+            this.map[y][x] = type
+
+            if(this.isValid(this.map, this.map_size)){
+                return true
+            }else{
+                this.map[y][x] = origin_type
+                console.log(`${type} 적용시 유효한 길 없음`)
+                return false
+            }
+        }
+        
     }
 
     getMap(){
@@ -749,7 +979,7 @@ class FrozenLake{
         `
             state에서 action을 수행했을 때의 다음 스테이트와 보상을 반환
         `
-        let action_move = {0:[-1, 0], 1:[0, 1], 2:[1, 0], 3:[0, -1]}
+        let action_move = {0:[0, -1], 1:[0, 1], 2:[-1, 0], 3:[1, 0]}
         
         let x, y
         [x, y] = this.state_to_coordinate(state)
@@ -809,20 +1039,35 @@ class Operator{
         this.agentGroup.goal_callback.add(() => this.informationViewer.goal += 1)
         this.agentGroup.hall_callback.add(() => this.informationViewer.hall += 1)
         this.agentGroup.after_step_callback.add(() => this.informationViewer.step += 1)
-
+        this.agentGroup.first_state.add((state) => {this.informationViewer.state += 1
+        })
+        this.agentGroup.first_state_action.add((state, action) => this.informationViewer.state_action += 1)
+        this.agentGroup.after_update_q_value_callbacks.add((state, updated_q_values) => {
+            var x, y
+            [x, y] = this.env.state_to_coordinate(state)
+            this.env_view.setValue(x, y,  Math.floor(Math.max(...updated_q_values) *100)/100)
+            this.env_view.setQvalues(x, y, updated_q_values)
+        })
 
         this.agents = []
         for(var i=0 ; i<this.agent_num ; i++){
             var agent = new Agent(this.env.getStates(), this.env.getActions())
             this.agents.push(agent)
             this.agentGroup.addAgent(agent)
-            agent.q_value_update_callback = (state, updated_value) => {
-                var x, y
-                [x, y] = this.env.state_to_coordinate(state)
-                this.env_view.setValue(x, y,  Math.floor(updated_value*100)/100)
-            }
         }        
         this.env_view = new FrozenLakeEnvViewer(map_size, map_size, 50);
+        this.env_view.click_callback.add((x, y) => {
+            
+            var state = this.env.coordinate_to_state(x, y)
+            var type = this.env.get_type(state)
+            type = (type == "H")? "F" : "H"
+            var success = this.env.modify(state, type)
+            console.log("success", success)
+            if(success){
+                this.env_view.applyMap(this.env.getMap())
+                this.env_view.setRewardMap(this.env.getRewardMap())
+            }
+        })
         this.env_view.applyMap(this.env.getMap())
         this.env_view.setRewardMap(this.env.getRewardMap())
         this.body.appendChild(this.env_view.getElement())
@@ -830,10 +1075,13 @@ class Operator{
     }
 
     one_step(agent_idx){
-        // agent 지우기
+        // agent 지우기 
         var agent = this.agents[agent_idx]
         if(agent.finished){
             this.initAgent(agent_idx)
+            let x, y
+            [x, y] = this.env.state_to_coordinate(agent.past_state)
+            this.env_view.showAgent(x, y, agent_idx, true)
         }else{
             let x, y
             [x, y] = this.env.state_to_coordinate(agent.past_state)
@@ -859,6 +1107,11 @@ class Operator{
     
             // 끝난 경우
             if (done == true){
+                if(state == this.map_size**2-1){
+                    this.informationViewer.goal += 1
+                }else{
+                    this.informationViewer.hall += 1
+                }
                 agent.end(reward, state)
                 return true
             }else{
@@ -908,6 +1161,7 @@ class Operator{
         while(true){
             // for(var i=0 ; i<this.agent_num ; i++){
             for(var i=0 ; i<this.agent_num ; i++){
+                console.log(i)
                 await this.one_step(i)
                 await wait(freq)
                 // break
@@ -967,7 +1221,8 @@ class InformationViewer{
         this._goal = 0
         this._hall = 0
         this._step = 0
-
+        this._state = 0
+        this._state_action = 0
         this.update()
     }
 
@@ -996,11 +1251,25 @@ class InformationViewer{
         }
     }
 
+    get state(){return this._state}
+    set state(value){
+        this._state = value
+        this.update()
+    }
+
+    get state_action(){return this._state_action}
+    set state_action(value){
+        this._state_action = value
+        this.update()
+    }
+
     update(){
         this.element.innerHTML = `
         <div>Step: ${this.step}</div>
         <div>Goal: ${this.goal}</div>
         <div>Hall: ${this.hall}</div>
+        <div>State: ${this.state}</div>
+        <div>State-Action: ${this.state_action}</div>
     `
     }
 
@@ -1011,16 +1280,13 @@ class InformationViewer{
 
 
 
-
-
-
 var operator
 document.getElementById("initialize_button").addEventListener('click',() => {
     if(operator != null){
         operator.env_view.element.remove()
         operator.informationViewer.element.remove()
     }
-    operator = new Operator(30, 27)
+    operator = new Operator(5, 5)
 })
 
 
@@ -1030,4 +1296,5 @@ document.getElementById("continue_button").addEventListener('click',() => {
 
 document.getElementById("one_episode_button").addEventListener('click',() => {operator.initAgent(0)
     operator.one_episode(1000)});
+
 
