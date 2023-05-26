@@ -158,14 +158,23 @@ class CellAgentViewer{
 
         this.mode_init(this.mode)
         this.AgentShowDelegator = AgentShowDelegatorFactory.make(this)
+        
     }
     mode_init(){
 
     }
-    createElement(){
-        var element = document.createElement("div");
-        element.className = "agent";
-        return element
+    createElement(mode = "circle"){
+        switch(mode){
+        case "circle":
+            var element = document.createElement("div");
+            element.className = "agent";
+            return element
+        case "mouse":
+            var element = document.createElement("div");
+            element.className = "agent";
+            element.innerHTML = `<img class = "agent_img" src = "./static/image/mouse.png">`
+            return element
+        }
     }
     setType(type){
         switch(type){
@@ -208,6 +217,7 @@ class AgentShowByVisibility extends AgentShowDelegator{
     }
     show(flag){
         this.agentView.element.style.visibility = flag? "":"hidden"
+        this.agentView.element.style.backgroundColor = "transparent"
     }
 }
 class AgentShowByColor extends AgentShowDelegator{
@@ -244,13 +254,12 @@ class GridCellViewer{
         this.click_callback = new Callback_2()
 
         
-        this.element.addEventListener("click", () => {this.click_callback.invoke(this.x, this.y)
-            console.log(this.x, this.y)
-        }, false)
+        this.element.addEventListener("click", () => {this.click_callback.invoke(this.x, this.y)}, false)
         this.setArrow("up", 0.5)
         this.setArrow("down", 0.5)
         this.setArrow("left", 0.5)
         this.setArrow("right", 0.5)
+        
     }
 
     createNode(){
@@ -301,7 +310,22 @@ class GridCellViewer{
     setValue(value){
         this.element.getElementsByClassName("value")[0].innerHTML = `${value}`
         if(this.type == "F"){
-            this.element.style.backgroundColor = [255, 1, 1];
+            // this.element.style.backgroundColor = [255, 1, 1];
+            
+            if(0 < value){
+                value = Math.max(Math.floor(100*(value**(1/2))), 0)
+
+                var r = (255-value).toString(16)
+                var g = (255).toString(16)
+                var b = (255-value).toString(16)
+            }else{
+                value = Math.max(Math.floor(-100*value), 0)
+
+                var r = (255).toString(16)
+                var g = (255-value).toString(16)
+                var b = (255-value).toString(16)
+            }
+            this.element.style.backgroundColor = `#${r}${g}${b}`
         }
     }
     setReward(reward){
@@ -313,14 +337,17 @@ class GridCellViewer{
         var min = Math.min(...q_value)
         
         q_value = util.vSub(q_value, util.ndarray([q_value.length], min))
+        
+
+        q_value = util.vSquare(q_value, 5)
+
         var sum = q_value.reduce((a, b) => a+b, 0)
+
         if(sum == 0){
             q_value = [0, 0, 0, 0]
         }else{
             q_value = util.vConstMul([...q_value], (1/sum))
         }
-        console.log("state", this.x, this.y, q_value) 
-        console.log(q_value)
 
         this.setArrow("up", q_value[0])
         this.setArrow("down", q_value[1])
@@ -477,7 +504,6 @@ class FrozenLakeEnvViewer{
     }
 }
 class AgentGrupe{
-    static default_value = 0.01
 
     constructor(states, actions){
         this.states = states
@@ -489,7 +515,7 @@ class AgentGrupe{
         this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
 
         this.model = new Model(states, actions)
-        this.memory = new Memory()
+        this.memory = new Memory(states, actions)
 
         this.after_update_q_value_callbacks = new Callback_2()
         this.after_step_callback = new Callback_0()
@@ -526,7 +552,7 @@ class GausianModel{
     constructor(){
         this.mean = 0;
         this.variance = 1;
-        this.update_ratio = 0.3
+        this.update_ratio = 0.5
     }   
 
     update(value){
@@ -539,12 +565,18 @@ class GausianModel{
         // gaussian은 나중에 library로 사용(일단은 편차가 없으니깐..)
         // this.mean + this.update_ratio
     }
+
+    is_mutation(value){
+        // console.log(this.mean)
+        // console.log(value)
+        return this.mean - value > 0.5
+    }
 }
 
 class Model{
 
     constructor(states, actions){
-        this.max_size = 500
+        this.max_size = 10000
         this.samples = []
         this.reward_model_table = util.ndarray([states.length, actions.length], 0)
         for(var state=0 ; state<states.length ; state++){
@@ -558,12 +590,19 @@ class Model{
         this.reward_model_table[state][action].update(reward)
     }
 
-    update(state, action, reward, next_state){
+    update(state, action, reward, next_state, finished){
+        var mutation = this.is_mutation(state, action, reward)
         this.reward_update(state, action, reward)
         if (this.max_size < this.samples.length){
             this.samples.shift()
         }
-        this.samples.push([state, action, next_state])
+        this.samples.push([state, action, next_state, finished])
+
+        return mutation
+    }
+    is_mutation(state, action, reward){
+    `발생하기 어려운 케이스인가?`
+        return this.reward_model_table[state][action].is_mutation(reward)
     }
 
     update_old(state, action, reward, next_state){
@@ -578,44 +617,60 @@ class Model{
     }
 
     get_sample(){
-        var state, action, next_state
-        [state, action, next_state] = util.randomChoice(this.samples)
+        if(this.samples.length == 0){
+            return null
+        }
+        var state, action, next_state, finished
+        [state, action, next_state, finished] = util.randomChoice(this.samples)
         var reward = this.reward_model_table[state][action].get_value()
-        return [state, action, reward, next_state]
+        return [state, action, reward, next_state, finished]
+    }
+
+    empty(){
+        this.samples = []
     }
 }
 
  class Memory{
-    constructor(){
-        this.state_memory = new Set()
-        this.action_memory = new Set()
-    }
-
-    state(state){
-        `state를 방문했다고 알리면 기존에 방문했던 곳인지 체크하고 기록`
-        if(this.state_memory.has(state)){ 
-            return false
-        }else{
-            this.state_memory.add(state)
-            return true
-        }
+    constructor(states, actions){
+        this.state_count_table = util.zeros([states.length])
+        this.state_action_count_table = util.zeros([states.length, actions.length])
+        this.visit_state_num = 0;
+        this.visit_state_action_num = 0
 
     }
 
-    state_action(state, action){
-        `state-action 조합을 알리면 기존에 수행했었는지 체크하고 기록`
-        var key = `${state}, ${action}`
-        if(this.action_memory.has(key)){
-            return false
-        }else{
-            this.action_memory.add(key)
+    count_state_and_check_first(state){
+        this.state_count_table[state] += 1
+        if(this.state_count_table[state] == 1){
+            this.visit_state_num += 1
             return true
+        }else{
+            return false
         }
+        
+    }
+    count_state_action_and_check_first(state, action){
+        this.state_action_count_table[state][action] += 1
+        if(this.state_action_count_table[state][action] == 1){
+            this.visit_state_action_num += 1
+            return true
+        }else{
+            return false
+        }
+    }
+
+    get_state_action_num(state, action){
+        return this.state_action_count_table[state][action]
+    }
+
+    get_state_num(state){
+        return this.state_count_table[state]
     }
  }
 
 class Agent{
-    constructor(states, actions, epsilon = 0.3, step_size = 1, gamma = 0.99, kappa = 0.001){
+    constructor(states, actions, epsilon = 0.05, step_size = 1, gamma = 0.99, kappa = 0.001){
         // group & sharing option
         this.group = null
         this.tau_table_sharing = true
@@ -623,8 +678,8 @@ class Agent{
         this.model_sharing = true
         this.memory_sharing = true
 
-        this.epsilon = Math.random()*0.1
-        this.kappa = Math.random()*0.001
+        this.epsilon = epsilon //Math.random()*0.1
+        this.kappa = kappa
 
         this.states = states
         this.actions = actions
@@ -634,15 +689,15 @@ class Agent{
         this.past_state = null
         this.past_action = null
     
-        this.use_curiosity = (Math.random() < 0.5)
+        this.use_curiosity = false
         this.visit_state = []
-        this.curiosity_reward = Math.random()*0.01
+        this.curiosity_reward = 0.01
         
         this.model = new Model(states, actions)
         this.planning_step = 10
         this.finished = true
 
-        this.default_reward = -0.001
+        this.default_reward = -0.01
         this.default_value = 0.01
         this.tau_table = util.zeros([states.length, actions.length])
         this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
@@ -654,7 +709,7 @@ class Agent{
         this.first_state = new Callback_1()
         this.first_state_action = new Callback_2()
         
-        this.memory = new Memory()
+        this.memory = new Memory(states, actions)
 
         this.total_step = 0
 
@@ -766,11 +821,15 @@ class Agent{
         }
     }
 
-    step(state, reward){
+    step(reward, state, finished){
+        if(finished == true){
+            console.log("finished")
+        }
+        
         reward += this.default_reward//*(Math.floor(Agent.total_step/1000))
 
         var memory = this.get_memory()
-        if(memory.state_action(state, this.past_action)){ // first state action??
+        if(memory.count_state_action_and_check_first(state, this.past_action)){ // first state action??
             if(this.use_curiosity){
                 // reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
                 // reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
@@ -778,19 +837,26 @@ class Agent{
             this.first_state_action.invoke(state, this.past_action)
         }
 
-        if(memory.state(state)){ // first visit??
+        // reward -= (memory.get_state_action_num(state, this.past_action)/100000)**(1/100)/10000
+
+        if(memory.count_state_and_check_first(state)){ // first visit??
             this.first_state.invoke(state)
             if(this.use_curiosity){
-                // reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
-                reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
+                reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
+                // reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
             }
         }        
-        
-        this.get_model().update(this.past_state, this.past_action, reward, state)
+
+
+        var mutation = this.get_model().update(this.past_state, this.past_action, reward, state, finished)
+        // if(mutation == true){
+        //     this.get_model().empty()
+        //     console.log("empty")
+        // }
         this.planning(this.planning_step)
 
         // update value
-        this.update_q_value(this.past_state, this.past_action, reward, state)
+        this.update_q_value(this.past_state, this.past_action, reward, state, finished)
 
         // select action
         var action = this.choose_action(state)
@@ -807,6 +873,8 @@ class Agent{
         this.total_step += 1
         this.after_step_callback.invoke()
         // return action
+
+        this.finished = finished
         return this.past_action
     }
 
@@ -818,8 +886,8 @@ class Agent{
         tau_table[state][action] = 0
     }
     
-    update_q_value(state, action, reward, next_state, end = false){
-        var next_return = (next_state == -1) ? 0 : this.gamma*Math.max(...this.get_q_value_table()[next_state])
+    update_q_value(state, action, reward, next_state, finished){
+        var next_return = (finished) ? 0 : this.gamma*Math.max(...this.get_q_value_table()[next_state])
         var cur_return = reward + next_return
         var cur_value = this.get_q_value_table()[state][action]
         var delta = cur_return - cur_value
@@ -828,20 +896,30 @@ class Agent{
         this.after_update_q_value_callbacks.invoke(state, this.get_q_value_table()[state])
     }
 
-    end(reward, state){
-        this.update_q_value(this.past_state, this.past_action, reward, -1)
-        this.past_state = state
-        this.finished = true
-        this.total_step += 1
-        this.after_step_callback.invoke()
-    }
+    // end(state, reward){
+    //     this.step()
+    //     this.update_q_value(this.past_state, this.past_action, reward, -1)
+    //     this.past_state = state
+    //     this.finished = true
+    //     this.total_step += 1
+    //     this.after_step_callback.invoke()
+    // }
 
 
     planning(step_num){
         for(var i=0 ; i<step_num ; i++){
-            var state, action, reward, next_state
-            [state, action, reward, next_state] = this.get_model().get_sample()
-            this.update_q_value(state, action, reward, next_state)
+            var sample = this.get_model().get_sample()
+            if(sample != null){
+                var state, action, reward, next_state, finished
+                [state, action, reward, next_state, finished] = sample
+                if(finished == true){
+                    console.log("finished planning")
+                }
+                console.log(state, action, reward, next_state, finished)
+                this.update_q_value(state, action, reward, next_state, finished)
+            }else{
+                break
+            }
         }
     }
 }
@@ -1062,7 +1140,6 @@ class Operator{
             var type = this.env.get_type(state)
             type = (type == "H")? "F" : "H"
             var success = this.env.modify(state, type)
-            console.log("success", success)
             if(success){
                 this.env_view.applyMap(this.env.getMap())
                 this.env_view.setRewardMap(this.env.getRewardMap())
@@ -1091,12 +1168,11 @@ class Operator{
             // agent 액션 수행
             let state, reward, done
             [state, reward, done] = this.env.step(agent.past_state, agent.past_action)
-        
+            
             // agent 그리기
             let nx, ny
             [nx, ny] = this.env.state_to_coordinate(state)
             this.env_view.showAgent(nx, ny, agent_idx, true)
-            
             
             var valueMap = agent.getValueMap()
             for(var i=0 ; i<valueMap.length ; i++){
@@ -1104,7 +1180,6 @@ class Operator{
                 [x, y] = this.env.state_to_coordinate(i)
                 this.env_view.setValue(x, y, valueMap[i])
             }
-    
             // 끝난 경우
             if (done == true){
                 if(state == this.map_size**2-1){
@@ -1112,10 +1187,10 @@ class Operator{
                 }else{
                     this.informationViewer.hall += 1
                 }
-                agent.end(reward, state)
+                agent.step(reward, state, true)
                 return true
             }else{
-                agent.step(state, reward)
+                agent.step(reward, state, false)
                 return false
             }
         }
@@ -1161,7 +1236,6 @@ class Operator{
         while(true){
             // for(var i=0 ; i<this.agent_num ; i++){
             for(var i=0 ; i<this.agent_num ; i++){
-                console.log(i)
                 await this.one_step(i)
                 await wait(freq)
                 // break
@@ -1286,7 +1360,7 @@ document.getElementById("initialize_button").addEventListener('click',() => {
         operator.env_view.element.remove()
         operator.informationViewer.element.remove()
     }
-    operator = new Operator(5, 5)
+    operator = new Operator(5, 3)
 })
 
 
