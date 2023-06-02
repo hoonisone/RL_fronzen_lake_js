@@ -314,6 +314,13 @@ class GridCellViewer{
         this.setArrow("right", 0.5)
         
     }
+    select(flag){
+        if(flag){
+            this.element.style.borderWidth = "thick";
+        }else{
+            this.element.style.borderWidth = "thin";
+        }
+    }
 
     createNode(){
         var element = document.createElement("div");
@@ -488,6 +495,7 @@ class GridCellViewer{
 
 class FrozenLakeEnvViewer{
     constructor(width, height, cellSize){
+        this.selected_cell = null
         this.width = width;
         this.height = height;
 
@@ -498,7 +506,7 @@ class FrozenLakeEnvViewer{
         this.click_callback = new Callback_2()
         this.ctrl_click_callback = new Callback_2()
 
-         
+        this.click_callback.add((x, y) => this.select(x, y))
     }
 
     resizeCell(size){
@@ -507,6 +515,14 @@ class FrozenLakeEnvViewer{
     }
     getElement(){
         return this.element;
+    }
+
+    select(x, y){
+        if(this.selected_cell != null){
+            this.selected_cell.select(false)
+        }
+        this.selected_cell = this.cellMap[y][x]
+        this.selected_cell.select(true)
     }
 
     createElement(width, height){
@@ -518,7 +534,7 @@ class FrozenLakeEnvViewer{
             for (var x=0 ; x<width ; x++){
                 var gridCell = new GridCellViewer(x, y)
                 gridCell.click_callback.add((x, y) => this.click_callback.invoke(x, y))
-                gridCell.ctrl_click_callback.add((x, y) => this.ctrl_click_callback.invoke(x, y))
+                gridCell.ctrl_click_callback.add((x, y) => this.ctrl_click_callback.invoke(x, y))       
                 element.appendChild(gridCell.getElement())     
                 map[y][x] = gridCell;
             }    
@@ -1521,7 +1537,7 @@ class Operator{
             this.agentGroup.addAgent(agent)
         }        
         this.env_view = new FrozenLakeEnvViewer(map_size, map_size, 50);
-        this.env_view.click_callback.add((x, y) => {
+        this.env_view.ctrl_click_callback.add((x, y) => {
             
             var state = this.env.coordinate_to_state(x, y)
             var type = this.env.get_type(state)
@@ -1536,7 +1552,7 @@ class Operator{
             }
             // this.env_view.setArrowsMap(this.agentGroup)/
         })
-        this.env_view.ctrl_click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
+        this.env_view.click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
         this.env_view.setStateMap(this.env.getMap())
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
         this.env_view.setRewardMap(this.env.getRewardMap())
