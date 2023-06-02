@@ -179,7 +179,21 @@ class Callback_2{
         }
     }
 }
+class Callback_3{
+    constructor(){
+        this.callbacks = []
+    }
 
+    add(callback){
+        this.callbacks.push(callback)
+    }
+
+    invoke(a, b, c){
+        for(var i=0 ; i<this.callbacks.length ; i++){
+            this.callbacks[i](a, b, c)
+        }
+    }
+}
 
 var label = ["open", "start", "hall", "wall", "goal"]
 class CellAgentViewer{
@@ -283,9 +297,17 @@ class GridCellViewer{
         this.order = GridCellViewer.CIRCLE_ORDER
 
         this.click_callback = new Callback_2()
+        this.ctrl_click_callback = new Callback_2()
 
         
-        this.element.addEventListener("click", () => {this.click_callback.invoke(this.x, this.y)}, false)
+        this.element.addEventListener("click", (e) => {
+            if(e.ctrlKey){
+                this.ctrl_click_callback.invoke(this.x, this.y)
+            }else{
+                this.click_callback.invoke(this.x, this.y)
+            }
+        })
+            
         this.setArrow("up", 0.5)
         this.setArrow("down", 0.5)
         this.setArrow("left", 0.5)
@@ -474,6 +496,7 @@ class FrozenLakeEnvViewer{
         this.resizeCell(cellSize)
 
         this.click_callback = new Callback_2()
+        this.ctrl_click_callback = new Callback_2()
 
          
     }
@@ -495,6 +518,7 @@ class FrozenLakeEnvViewer{
             for (var x=0 ; x<width ; x++){
                 var gridCell = new GridCellViewer(x, y)
                 gridCell.click_callback.add((x, y) => this.click_callback.invoke(x, y))
+                gridCell.ctrl_click_callback.add((x, y) => this.ctrl_click_callback.invoke(x, y))
                 element.appendChild(gridCell.getElement())     
                 map[y][x] = gridCell;
             }    
@@ -675,6 +699,11 @@ class GausianModel{
 
     is_mutation(value){
         var z = Math.abs(value-this.mean)/(this.variance**(0.5))
+        // console.log("z", z)
+        // console.log("value", value)
+        // console.log("mean", this.mean)
+        // console.log("variance", this.variance)
+        // console.log("@@@@@@@@@", (1-Math.exp(-(z)))**10)
         return (1-Math.exp(-(z)))**10
     }
 
@@ -835,24 +864,46 @@ class Policy{
     }
 }
 
-class WeightPolicy extends AgentShowDelegator{
-    constructor(agentView){
-        super(agentView)
+class SoftMaxPolicy extends Policy{
+    constructor(agent, epsilon = 0.03, qw = 1, ew = 0.01, bw = 0.01, tw = 0.000){
+        super(agent, epsilon, qw, ew, bw, tw)
     }
 
-    //     choose_action(state){
-//         var values = this.getValueForState(state)
-//         console.log("values", values)
-//         if (Math.random() < this.epsilon){
-//             return util.randomChoice(this.agent.actions)            
-//         }else{
-//             var max_index_list = util.argMax(values, {all:true})
-//             console.log(max_index_list)
-//             var index = util.randomChoice(max_index_list)
-//             console.log(index)
-//             return this.agent.actions[index]
-//         }
-//     }
+        choose_action(state){
+            var values = this.getValueForState(state)
+            for(var i=0 ; i<values.length ; i++){
+                values[i] = Math.exp(values[i])
+            }
+            var max_index_list = util.argMax(values, {all:true})
+            var index = util.randomChoice(max_index_list)
+            return this.agent.actions[index]
+        }
+}
+
+
+class WeightPolicy extends Policy{
+    constructor(agent, epsilon = 0.03, qw = 1, ew = 0.01, bw = 0.01, tw = 0.000){
+        super(agent, epsilon, qw, ew, bw, tw)
+    }
+
+        choose_action(state){
+            var qValue = this.getQValueForState(state)
+            var eValue = this.getEValueForState(state)
+            var bValue = this.getBValueForState(state)
+            var tValue = this.getTValueForState(state)
+            qValue = util.vConstMul(qValue, this.qw)
+            eValue = util.vConstMul(eValue, this.ew)
+            bValue = util.vConstMul(bValue, this.bw)
+            tValue = util.vConstMul(tValue, this.tw)
+
+            eValue = util.vAdd(util.vAdd(eValue, bValue), tValue)
+            var values = (Math.max(...eValue) < Math.max(...qValue)) ? qValue : eValue
+            
+            var max_index_list = util.argMax(values, {all:true})
+            var index = util.randomChoice(max_index_list)
+            return this.agent.actions[index]
+
+        }
 }
 
 
@@ -1079,16 +1130,16 @@ class Agent{
 
         // policy 
         this.qw = 1
-        this.ew = 0.00
+        this.ew = 1
         this.bw = 1
-        this.tw = 0.00001
+        this.tw = 0.01
 
         // reward
-        this.default_reward = -0.001
+        this.default_reward = -0.01
         this.curiosity_reward = 0.001
         this.repeat_penalty = -0.01
 
-        this.epsilon = 0.1
+        this.epsilon = 0.01
 
         // basic element
         this.states = states
@@ -1100,8 +1151,9 @@ class Agent{
 
         this._memory = new Memory(states, actions)
 
-        this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
-
+        // this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
+        this.policy = new SoftMaxPolicy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
+        
         var q_value_manager_args = {
             default_value : 0,
             value_update_ratio : 0.3,
@@ -1109,7 +1161,7 @@ class Agent{
             mean : 0,
             variance : 0,
             model_update_ratio : 0.5,
-            planning_num : 1000,
+            planning_num : 100,
         }
         this._q_manager = new RewardManager(states, actions, q_value_manager_args)
         var e_value_manager_args = {
@@ -1119,7 +1171,7 @@ class Agent{
             mean : 0,
             variance : 0,
             model_update_ratio : 0.9,
-            planning_num : 1000,
+            planning_num : 100,
         }
         this._e_manager = new RewardManager(states, actions, e_value_manager_args)
 
@@ -1130,7 +1182,7 @@ class Agent{
             mean : 0,
             variance : 0,
             model_update_ratio : 0.1,
-            planning_num : 1000,
+            planning_num : 100,
         }
         this._b_manager = new RewardManager(states, actions, b_value_manager_args)
 
@@ -1200,23 +1252,26 @@ class Agent{
         }
 
         reward += this.default_reward
-
-        var e_reward = this.q_manager.is_mutation(this.past_state, this.past_action, reward)
-        e_reward = Math.max(0, e_reward-0.1)
-        if(e_reward < 0.3){
-            e_reward = 0
-            console.log("e_reward", 0)
-        }else{
-            console.log("e_reward", e_reward)
+        var count = this.memory.state_action_count_table[this.past_state][this.past_action]
+        
+        if(10 < count){
+            var e_reward = this.q_manager.is_mutation(this.past_state, this.past_action, reward)
+            e_reward = Math.max(0, e_reward-0.1)
+            if(e_reward < 0.1){
+                e_reward = 0
+            }else{
+            }
+            this.e_manager.update(this.past_state, this.past_action, e_reward, state, finished)
         }
+        
 
-        this.e_manager.update(this.past_state, this.past_action, e_reward, state, finished)
 
         this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
 
         var boring_reward = 0
         if(this.memory.count_state_action_and_check_first(this.past_state, this.past_action)){
-            boring_reward += this.curiosity_reward*(1 + this.memory.get_state_action_num(this.past_state, this.past_action)**(1/2))
+            // boring_reward += this.curiosity_reward*(1 + this.memory.get_state_action_num(this.past_state, this.past_action)**(1/100))
+            boring_reward += this.curiosity_reward
         }
         if(this.memory.count_state_and_check_first(state)){
                
@@ -1434,7 +1489,7 @@ class FrozenLake{
 
 class Operator{
     constructor(map_size, agent_num, frozen_ratio){
-        
+        this.selected_cell = 0
         this.agent_num = agent_num
         this.body = document.body;
         this.map_size = map_size
@@ -1481,6 +1536,7 @@ class Operator{
             }
             // this.env_view.setArrowsMap(this.agentGroup)/
         })
+        this.env_view.ctrl_click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
         this.env_view.setStateMap(this.env.getMap())
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
         this.env_view.setRewardMap(this.env.getRewardMap())
@@ -1591,7 +1647,7 @@ class Operator{
             // for(var i=0 ; i<this.agent_num ; i++){
             for(var i=0 ; i<this.agent_num ; i++){
                 await this.one_step(i)
-                this.update_cell_view(1)
+                this.update_cell_view(this.selected_cell)
                 await wait(freq)
                 // break
             }
@@ -1781,7 +1837,7 @@ document.getElementById("initialize_button").addEventListener('click',() => {
 
 
 document.getElementById("continue_button").addEventListener('click',() => {
-    operator.all_agent_step(1)
+    operator.all_agent_step(0.0001)
 })
 
 document.getElementById("one_episode_button").addEventListener('click',() => {operator.initAgent(0)
