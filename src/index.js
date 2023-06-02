@@ -6,8 +6,19 @@
 const wait = (timeToDelay) => new Promise((resolve) => setTimeout(resolve, timeToDelay))
 class util{
     array_functions = []
-    static argMax(array) {
-        return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
+    static argMax(array, all=false) {
+        if(all == false){
+            return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
+        }else{
+            var max_value = Math.max(...array)
+            var max_index_list = []
+            for(var i=0 ; i<array.length ; i++){
+                if (array[i] == max_value){
+                    max_index_list.push(i)
+                } 
+            }
+            return max_index_list
+        }
     }
 
     static listComp(list1, list2){
@@ -54,6 +65,11 @@ class util{
             return arr;
         }
     }
+    static sum(v){
+        v = [...v]
+        return v.reduce((a, b) => a+b, 0)
+    }
+
     static randomChoice(items){
         var index = Math.floor(Math.random() * items.length);
         return items[index];
@@ -82,24 +98,40 @@ class util{
         return arr
     }
     static vConstAdd(v, c){
+        v = [...v]
         for(var i=0 ; i<v.length; i++){
             v[i] += c
         }
         return v
     }
     static vConstMul(v, c){
+        v = [...v]
         for(var i=0 ; i<v.length; i++){
             v[i] *= c
         }
         return v
     }
     static vSquare(v, x){
+        v = [...v]
         for(var i=0 ; i<v.length; i++){
             v[i] **= x
         }
         return v
     }
 
+    static gaussianRandom() {
+        var v1, v2, s;
+      
+        do {
+          v1 = 2 * Math.random() - 1;   // -1.0 ~ 1.0 까지의 값
+          v2 = 2 * Math.random() - 1;   // -1.0 ~ 1.0 까지의 값
+          s = v1 * v1 + v2 * v2;
+        } while (s >= 1 || s == 0);
+      
+        s = Math.sqrt( (-2 * Math.log(s)) / s );
+      
+        return v1 * s;
+      }
 }
 
 class Callback_0{
@@ -233,7 +265,6 @@ class AgentShowByColor extends AgentShowDelegator{
     }
 }
 
-
 class GridCellViewer{
 
     static BASIT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -332,7 +363,7 @@ class GridCellViewer{
         this.element.getElementsByClassName("reward")[0].innerHTML = `r=${reward}`
     }
 
-    setQValueArrow(q_value){
+    setArrows(q_value){
         
         var min = Math.min(...q_value)
         
@@ -470,15 +501,53 @@ class FrozenLakeEnvViewer{
         }
         return [element, map]; 
     }
-    applyMap(map){
+    setState(x, y, state){
+        this.cellMap[y][x].setState(state)
+    }
+    setStateMap(stateMap){
         for (var y=0 ; y<this.height ; y++){
             for (var x=0 ; x<this.width ; x++){
-                this.cellMap[y][x].setState(map[y][x]);
+                this.setState(x, y, stateMap[y][x])
             }    
         }
     }
-    showAgent(x, y, agent_idx, flag){
+    setValue(x, y, value){
+        this.cellMap[y][x].setValue(value)
+    }
+    setValueMap(valueMap){
+        for (var y=0 ; y<this.height ; y++){
+            for (var x=0 ; x<this.width ; x++){
+                this.setValue(x, y, valueMap[y][x])
+            }    
+        }
+    }
 
+    setArrows(x, y, arrows_ratio){
+        this.cellMap[y][x].setArrows(arrows_ratio)
+    }
+    setArrowsMap(arrows_ratio_map){
+        for (var y=0 ; y<this.height ; y++){
+            for (var x=0 ; x<this.width ; x++){
+                this.setArrows(x, y, arrows_ratio_map[y][x])
+            }    
+        }
+    }
+    
+    
+    setReward(x, y, reward){
+        this.cellMap[y][x].setReward(reward)
+    }
+    setRewardMap(rewardMap){
+        for (var y=0 ; y<this.height ; y++){
+            for (var x=0 ; x<this.width ; x++){
+                this.setReward(x, y, rewardMap[y][x])
+            }    
+        }
+    }
+
+
+    showAgent(x, y, agent_idx, flag){
+    
         if(flag == true){
             this.cellMap[y][x].agentEnter()
         }else{
@@ -486,38 +555,60 @@ class FrozenLakeEnvViewer{
         }
         // showAgent(agent_idx, flag)
     }
-    setValue(x, y, value){
-        this.cellMap[y][x].setValue(value)
-    }
-    setQvalues(x, y, q_values){
-        this.cellMap[y][x].setQValueArrow(q_values)
-    }
-    setReward(x, y, reward){
-        this.cellMap[y][x].setReward(reward)
-    }
-    setRewardMap(rewardMap){
-        for (var y=0 ; y<this.height ; y++){
-            for (var x=0 ; x<this.width ; x++){
-                this.cellMap[y][x].setReward(rewardMap[y][x])
-            }    
-        }
-    }
 }
 class AgentGrupe{
-
+    
     constructor(states, actions){
         this.states = states
         this.actions = actions
         this.agents = []
         this.total_step = 0
-        this.default_value = 0.01
-        this.tau_table = util.zeros([states.length, actions.length])
-        this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
 
-        this.model = new Model(states, actions)
-        this.memory = new Memory(states, actions)
+        // // policy
+        // this.qw = 0
+        // this.ew = 1
+        // this.tw = 0.000
 
-        this.after_update_q_value_callbacks = new Callback_2()
+        // // reward
+        // this.default_reward = -0.01
+        // this.curiosity_reward = 0.1
+
+        // // q_value
+        // this.q_default_value = 0, 
+        // this.q_step_size = 0.05, 
+        // this.q_gamma = 0.99
+
+        // this.q_model_mean = this.default_reward
+        // this.q_model_variance = 0
+        // this.q_model_step_size = 0.05
+
+        // // e_value
+        // this.e_default_value = 0.1, 
+        // this.e_step_size = 0.05,
+        // this.e_gamma = 0.9
+        
+        // this.e_model_mean = 0
+        // this.e_model_variance = 0
+        // this.e_model_step_size = 0.05
+
+
+        // this.epsilon = 0.03
+
+        // this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.tw)
+
+        // this.q_value_table = new ActionValueTable(states, actions, this.q_default_value, this.q_step_size, this.q_gamma)
+        // this.q_value_model = new ActionRewardModel(states, actions, this.q_model_mean, this.q_model_variance, this.q_model_step_size)
+
+        // this.e_value_table = new ActionValueTable(states, actions, this.e_default_value, this.e_step_size, this.e_gamma)
+        // this.e_value_model = new ActionRewardModel(states, actions, this.e_model_mean, this.e_model_variance, this.e_model_step_size, false)
+
+        // this.tau_value_table = new ActionTauTable(states, actions)
+
+        // this.memory = new Memory(states, actions)
+
+
+
+        this.after_action_value_update_callback = new Callback_2() // state, action
         this.after_step_callback = new Callback_0()
         this.goal_callback = new Callback_0()
         this.hall_callback = new Callback_0()
@@ -533,12 +624,12 @@ class AgentGrupe{
         if(this.isValidAgnet(agent)){
             agent.set_group(this) // 꼼수.. agent랑 동일한 값들을 따로 정의하기 귀찮
             this.agents.push(agent)
-            agent.after_update_q_value_callbacks.add((state, updated_q_value) => {this.after_update_q_value_callbacks.invoke(state, updated_q_value)})
             agent.after_step_callback.add(() => this.after_step_callback.invoke())
             agent.goal_callback.add(() => this.goal_callback.invoke())
             agent.hall_callback.add(() => this.hall_callback.invoke())
             agent.first_state_action.add((state, action) => this.first_state_action.invoke(state, action))
             agent.first_state.add((state) => this.first_state.invoke(state))
+            agent.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
         }else{
             throw "invalid agent!!! check the states and actions"
         }
@@ -547,89 +638,59 @@ class AgentGrupe{
     getAgent(idx){
         return this.agents[idx]
     }
+
+    get_memory(){
+        return this.memory
+    }
 }
 class GausianModel{
-    constructor(){
+    static MIN_VARIANCE = 0.0000000000000000000001 // 최소 분산 (to avoid zero divide)
+    constructor(mean, variance, update_ratio=0.1, no_variance = false){
         this.mean = 0;
-        this.variance = 1;
-        this.update_ratio = 0.5
+        this.variance = GausianModel.MIN_VARIANCE; 
+        this.update_ratio = update_ratio
+        this.n = 0
+        this.no_variance = no_variance
     }   
 
     update(value){
-        this.mean += this.update_ratio*(value - this.mean)
-        this.variance += this.update_ratio*((value - this.mean)**2 - this.variance)
+        this.n += 1
+        var update_ratio = Math.max((1/this.n), this.update_ratio)
+        this.mean += update_ratio*(value - this.mean)
+        this.variance += update_ratio*((value - this.mean)**2 - this.variance)
+        this.variance = Math.max(this.variance, GausianModel.MIN_VARIANCE)
     }
 
     get_value(){
-        return this.mean;
+        if(this.no_variance){
+            return this.mean
+        }else{
+            return this.mean + util.gaussianRandom()*this.variance**(0.5);
+        }
+        
+        
         // gaussian은 나중에 library로 사용(일단은 편차가 없으니깐..)
         // this.mean + this.update_ratio
     }
 
     is_mutation(value){
-        // console.log(this.mean)
-        // console.log(value)
-        return this.mean - value > 0.5
+        var z = Math.abs(value-this.mean)/(this.variance**(0.5))
+        return (1-Math.exp(-(z)))**10
+    }
+
+    get_mean(){
+        return this.mean
+    }
+
+    get_variance(){
+        return this.variance
+    }
+
+    get_standard_deviation(){
+        return this.variance**(1/2)
     }
 }
 
-class Model{
-
-    constructor(states, actions){
-        this.max_size = 10000
-        this.samples = []
-        this.reward_model_table = util.ndarray([states.length, actions.length], 0)
-        for(var state=0 ; state<states.length ; state++){
-            for(var action=0 ; action<actions.length ; action++){
-                this.reward_model_table[state][action] = new GausianModel()
-            }
-        }
-    }
-
-    reward_update(state, action, reward){
-        this.reward_model_table[state][action].update(reward)
-    }
-
-    update(state, action, reward, next_state, finished){
-        var mutation = this.is_mutation(state, action, reward)
-        this.reward_update(state, action, reward)
-        if (this.max_size < this.samples.length){
-            this.samples.shift()
-        }
-        this.samples.push([state, action, next_state, finished])
-
-        return mutation
-    }
-    is_mutation(state, action, reward){
-    `발생하기 어려운 케이스인가?`
-        return this.reward_model_table[state][action].is_mutation(reward)
-    }
-
-    update_old(state, action, reward, next_state){
-        if (this.max_size < this.samples.length){
-            this.samples.shift()
-        }
-        this.samples.push([state, action, reward, next_state])
-    }
-
-    get_sample_old(){
-        return util.randomChoice(this.samples)
-    }
-
-    get_sample(){
-        if(this.samples.length == 0){
-            return null
-        }
-        var state, action, next_state, finished
-        [state, action, next_state, finished] = util.randomChoice(this.samples)
-        var reward = this.reward_model_table[state][action].get_value()
-        return [state, action, reward, next_state, finished]
-    }
-
-    empty(){
-        this.samples = []
-    }
-}
 
  class Memory{
     constructor(states, actions){
@@ -667,50 +728,426 @@ class Model{
     get_state_num(state){
         return this.state_count_table[state]
     }
- }
+}
 
-class Agent{
-    constructor(states, actions, epsilon = 0.05, step_size = 1, gamma = 0.99, kappa = 0.001){
-        // group & sharing option
-        this.group = null
-        this.tau_table_sharing = true
-        this.q_value_table_sharing = true
-        this.model_sharing = true
-        this.memory_sharing = true
 
-        this.epsilon = epsilon //Math.random()*0.1
-        this.kappa = kappa
+class ActionTauTable{
+    constructor(states, actions){
+        this.value_table = util.ndarray([states.length, actions.length], 0)
+    }
 
+    update(state, action){
+        var value_table = this.value_table
+        for(var i=0 ; i<value_table.length ; i++){
+            value_table[i] = util.vAdd(value_table[i], util.ones([value_table[i].length]))
+        }
+        value_table[state][action] = 0
+    }
+
+    get_taus_for_state(state){
+        return this.value_table[state]
+    }
+}
+
+class Policy{
+    constructor(agent, epsilon = 0.03, qw = 1, ew = 0.01, bw = 0.01, tw = 0.000){
+        this.agent = agent
+
+        this.epsilon = epsilon
+        this.qw = qw // real value weight
+        this.ew = ew // exploration value weight
+        this.bw = bw
+        this.tw = tw // tau weight (kappa)
+    }
+
+    getTValueForState(state){
+        var tau = this.agent.get_tau_value_table().value_table[state]
+
+        tau = util.vSquare([...tau], 0.5)
+        return tau
+    }
+    getQValueForState(state){
+        return this.agent.q_manager.get_values_for_state(state)
+    }
+    getEValueForState(state){ 
+        return this.agent.e_manager.get_values_for_state(state)
+    }
+    getBValueForState(state){
+        return this.agent.b_manager.get_values_for_state(state)
+    }
+    getValueForState(state){
+        var qValue = this.getQValueForState(state)
+        var eValue = this.getEValueForState(state)
+        var bValue = this.getBValueForState(state)
+        var tValue = this.getTValueForState(state)
+        qValue = util.vConstMul(qValue, this.qw)
+        eValue = util.vConstMul(eValue, this.ew)
+        bValue = util.vConstMul(bValue, this.bw)
+        tValue = util.vConstMul(tValue, this.tw)
+        
+        return util.vAdd(util.vAdd(qValue, eValue), util.vAdd(bValue, tValue))
+    }
+
+    choose_action(state, mode = "greedy"){
+        var values = this.getValueForState(state)
+        if (Math.random() < this.epsilon){
+            return util.randomChoice(this.agent.actions)            
+        }else{
+            if(mode == "greedy"){
+                var max_index_list = util.argMax(values, {all:true})
+                var index = util.randomChoice(max_index_list)
+                return this.agent.actions[index]
+            }else{
+                var min_value = Math.min(...values)
+
+                values = util.vConstAdd(values, -min_value)
+                values = util.vConstAdd(values, 0.01)
+                var sum = util.sum(values)
+                if(sum == 0){
+                    return this.choose_action(state, mode="greedy")
+                }
+                values = util.vConstMul(values, (1/sum))
+                var p = Math.random()
+                for(var i=0 ; i<values.length ; i++){
+                    if(p < values[i]){
+                        return this.agent.actions[i]
+                    }
+                    p -= values[i]
+                }
+                return 0
+            }
+
+
+        }
+    }
+
+    getStateValue(state){
+        var qValues = this.getValueForState(state)
+        return Math.max(...qValues)
+    }
+
+    getStateValueMap(){
+        let valueMap = []
+        for(var i=0 ; i<this.agent.states.length; i++){
+            valueMap.push(this.getStateValue(this.agent.states[i]))
+        }
+        return valueMap
+    }
+}
+
+class WeightPolicy extends AgentShowDelegator{
+    constructor(agentView){
+        super(agentView)
+    }
+
+    //     choose_action(state){
+//         var values = this.getValueForState(state)
+//         console.log("values", values)
+//         if (Math.random() < this.epsilon){
+//             return util.randomChoice(this.agent.actions)            
+//         }else{
+//             var max_index_list = util.argMax(values, {all:true})
+//             console.log(max_index_list)
+//             var index = util.randomChoice(max_index_list)
+//             console.log(index)
+//             return this.agent.actions[index]
+//         }
+//     }
+}
+
+
+class ActionValueTable{
+    constructor(states, actions, default_value = 0, step_size = 0.1, gamma = 0.99){
         this.states = states
         this.actions = actions
+        this.default_value = default_value
         this.step_size = step_size
         this.gamma = gamma
-        // this.q_values = util.zeros([states.length, actions.length])
+        this.value_table = util.ndarray([states.length, actions.length], this.default_value)
+
+        
+    }
+
+    update(state, action, reward, next_state, finished){
+        // console.log(state, action, reward, next_state, finished)
+        var next_return = (finished) ? 0 : this.gamma*Math.max(...this.value_table[next_state])
+        var cur_return = reward + next_return
+        var cur_value = this.value_table[state][action]
+        var delta = cur_return - cur_value
+        this.value_table[state][action] += this.step_size*delta
+    }
+    getValueMap(){
+        let valueMap = []
+        for(var i=0 ; i<this.states.length; i++){
+            var qValues  = this.value_table[this.states[i]]
+            var maxQValues = Math.max(...qValues)
+            valueMap.push(Math.floor(maxQValues*100)/100)
+        }
+        return valueMap
+    }
+
+    get_values_for_state(state){
+        return this.value_table[state]
+    }
+
+}
+class ActionRewardModel{
+
+    constructor(states, actions, mean, variance, update_ratio, no_variance = false){
+        this.max_size = 10000
+        this.samples = []
+        this.reward_model_table = util.ndarray([states.length, actions.length], 0)
+        for(var state=0 ; state<states.length ; state++){
+            for(var action=0 ; action<actions.length ; action++){
+                this.reward_model_table[state][action] = new GausianModel(mean, variance, update_ratio, no_variance)
+            }
+        }
+    }
+
+    update(state, action, reward, next_state, finished){
+        this.reward_model_table[state][action].update(reward)
+        if (this.max_size < this.samples.length){
+            this.samples.shift()
+        }
+        this.samples.push([state, action, next_state, finished])
+    }
+
+    is_mutation(state, action, reward){
+    `발생하기 어려운 케이스인가?`
+        return this.reward_model_table[state][action].is_mutation(reward)
+    }
+
+    get_sample(){
+        if(this.samples.length == 0){
+            return null
+        }
+        var state, action, reward, next_state, finished
+        [state, action, next_state, finished] = util.randomChoice(this.samples)
+        reward = this.reward_model_table[state][action].get_value()
+        return [state, action, reward, next_state, finished]
+    }
+
+    get_means_for_state(state){
+        var means = []
+        this.reward_model_table[state].forEach(model => means.push(model.get_mean()))
+        return means
+    }
+
+    get_variances_for_state(state){
+        var variances = []
+        this.reward_model_table[state].forEach(model => variances.push(model.get_variance()))
+        return variances
+    }
+
+    get_standard_deviations_for_state(state){
+        var standard_deviations = []
+        this.reward_model_table[state].forEach(model => standard_deviations.push(model.get_standard_deviation()))
+        return standard_deviations
+    }
+}
+
+class RewardManager{
+    constructor(states, actions, ...args){
+        // value table
+        this.default_value = 0
+        this.value_update_ratio = 0.1
+        this.discounting_factor = 0.99
+
+        // reward model
+        this.mean = 0
+        this.variance = 0
+        this.model_update_ratio = 0.1
+
+        // planning
+        this.planning_num = 100
+
+        this.seg_arg(args[0])
+
+        this.value_table = new ActionValueTable(states, actions, this.default_value, this.value_update_ratio, this.discounting_factor)
+        this.reward_model = new ActionRewardModel(states, actions, this.mean, this.variance, this.model_update_ratio, {no_variance : true}) 
+        
+        this.after_action_value_update_callback = new Callback_2() // state, action
+    }
+
+    seg_arg(args){
+        // value table
+        this.default_value = (args.default_value != null)?args.default_value:this.default_value
+        this.value_update_ratio = (args.value_update_ratio != null)?args.value_update_ratio:this.value_update_ratio
+        this.discounting_factor = (args.discounting_factor != null)?args.discounting_factor:this.discounting_factor
+
+        // reward model
+        this.mean = (args.mean != null)?args.mean:this.mean
+        this.variance = (args.variance != null)?args.variance:this.variance
+        this.model_update_ratio = (args.model_update_ratio != null)?args.model_update_ratio:this.model_update_ratio
+
+        // planning
+        this.planning_num = (args.planning_num != null)?args.planning_num:this.planning_num
+
+        console.log("args", args)
+
+        console.log(args.default_value != null)
+        console.log(args.value_update_ratio != null)
+        console.log(args.discounting_factor != null)
+
+        console.log(args.mean != null)
+        console.log(args.variance != null)
+        console.log(args.model_update_ratio != null)
+
+        console.log(args.planning_num != null)
+
+        console.log(this.default_value)
+        console.log(this.value_update_ratio)
+        console.log(this.discounting_factor)
+
+        console.log(this.mean)
+        console.log(this.variance)
+        console.log(this.model_update_ratio)
+
+        console.log(this.planning_num)
+   
+    }
+
+    recaculate_reward(state, action, reward, next_state){
+        `배정된 욕구에 대한 리워드를 다시 계한`
+        return reward
+    }
+
+    update(state, action, reward, next_state){
+        reward = this.recaculate_reward(state, action, reward, next_state)
+        this.value_table.update(state, action, reward, next_state)
+        this.reward_model.update(state, action, reward, next_state)
+        this.after_action_value_update_callback.invoke(state, action)
+
+    }
+
+    planning(){
+        for(var i=0 ; i<this.planning_num ; i++){
+            
+            var sample = this.reward_model.get_sample()
+            if(sample == null) {
+                break;
+            }
+            var state, action, reward, next_state, finished
+            [state, action, reward, next_state, finished] = sample
+            this.value_table.update(state, action, reward, next_state, finished)
+            this.after_action_value_update_callback.invoke(state, action)            
+        }
+    }
+
+    getValueMap(){
+        return this.value_table.getValueMap()
+    }
+
+    get_values_for_state(state){
+        return this.value_table.get_values_for_state(state)
+    }
+
+    get_reward_means_for_state(state){
+        return this.reward_model.get_means_for_state(state)
+    }
+
+    get_reward_variations_for_state(state){
+        return this.reward_model.get_variations_for_state(state)
+    }
+
+    get_reward_standard_deviations_for_state(state){
+        return this.reward_model.get_standard_deviations_for_state(state)
+    }
+
+    is_mutation(state, action, reward){
+        return this.reward_model.is_mutation(state, action, reward)
+    }
+
+}
+
+class Agent{
+    constructor(states, actions){
+
+        // group & sharing option
+        this.group = null        
+        this.q_sharing = false
+        this.e_sharing = false
+        this.b_sharing = false
+
+        this.tau_value_table_sharing = false
+        
+        this.policy_sharing = false
+        this.reward_policy_sharing = false
+        
+    
+        this.memory_sharing = false
+
+        // policy 
+        this.qw = 1
+        this.ew = 0.00
+        this.bw = 1
+        this.tw = 0.00001
+
+        // reward
+        this.default_reward = -0.001
+        this.curiosity_reward = 0.001
+        this.repeat_penalty = -0.01
+
+        this.epsilon = 0.1
+
+        // basic element
+        this.states = states
+        this.actions = actions
         this.past_state = null
         this.past_action = null
-    
-        this.use_curiosity = false
-        this.visit_state = []
-        this.curiosity_reward = 0.01
         
-        this.model = new Model(states, actions)
-        this.planning_step = 10
         this.finished = true
 
-        this.default_reward = -0.01
-        this.default_value = 0.01
-        this.tau_table = util.zeros([states.length, actions.length])
-        this.q_value_table = util.ndarray([states.length, actions.length], this.default_value)
+        this._memory = new Memory(states, actions)
 
-        this.after_update_q_value_callbacks = new Callback_2()
+        this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
+
+        var q_value_manager_args = {
+            default_value : 0,
+            value_update_ratio : 0.3,
+            discounting_factor : 0.99,
+            mean : 0,
+            variance : 0,
+            model_update_ratio : 0.5,
+            planning_num : 1000,
+        }
+        this._q_manager = new RewardManager(states, actions, q_value_manager_args)
+        var e_value_manager_args = {
+            default_value : 0,
+            value_update_ratio : 0.9,
+            discounting_factor : 0.9,
+            mean : 0,
+            variance : 0,
+            model_update_ratio : 0.9,
+            planning_num : 1000,
+        }
+        this._e_manager = new RewardManager(states, actions, e_value_manager_args)
+
+        var b_value_manager_args = {
+            default_value : 0,
+            value_update_ratio : 0.5,
+            discounting_factor : 0.99,
+            mean : 0,
+            variance : 0,
+            model_update_ratio : 0.1,
+            planning_num : 1000,
+        }
+        this._b_manager = new RewardManager(states, actions, b_value_manager_args)
+
+        this.q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
+        this.e_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
+        this.b_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
+
+        this.tau_value_table = new ActionTauTable(states, actions)
+
+        this.after_action_value_update_callback = new Callback_2() // state, action
+
         this.after_step_callback = new Callback_0()
         this.goal_callback = new Callback_0()
         this.hall_callback = new Callback_0()
         this.first_state = new Callback_1()
         this.first_state_action = new Callback_2()
         
-        this.memory = new Memory(states, actions)
-
         this.total_step = 0
 
     }
@@ -719,156 +1156,93 @@ class Agent{
         this.group = group
     }
 
-    get_tau_table(){
-        if(this.group != null && this.tau_table_sharing){
-            return this.group.tau_table
+    get_policy(){
+        if(this.group != null && this.policy_sharing){
+            return this.group.policy
         }else{
-            return this.tau_table
+            return this.policy
         }
     }
 
-    get_q_value_table(){
-        if(this.group != null && this.q_value_table_sharing){
-            return this.group.q_value_table
+    get_tau_value_table(){
+        if(this.group != null && this.tau_value_table_sharing){
+            return this.group.tau_value_table
         }else{
-            return this.q_value_table
+            return this.tau_value_table
         }
     }
 
-    get_model(){
-        if(this.group != null && this.model_sharing){
-            return this.group.model
-        }else{
-            return this.model
-        }
+    get q_manager() {
+        return (this.group != null && this.q_sharing) ? this.group._q_manager : this._q_manager
     }
 
-    getQValueForState(state){
-        // return this.q_values[state]
-
-        var tau = [...this.get_tau_table()[state]]
-        
-        tau = util.vSquare(tau, 0.5)
-        tau = util.vConstMul(tau, this.kappa)
-
-        return util.vAdd(this.get_q_value_table()[state], tau)
+    get e_manager() {
+        return (this.group != null && this.e_sharing) ? this.group._e_manager : this._e_manager
     }
-    getValueMap(mode = "uniform"){
-        let valueMap = []
-        for(var i=0 ; i<this.states.length; i++){
-            // var qValues = this.q_values[this.states[i]]
-            var qValues  = this.getQValueForState(this.states[i])
-            var maxQValues = Math.max(...qValues)
-            valueMap.push(Math.floor(maxQValues*100)/100)
-        }
-        return valueMap
+    get b_manager(){
+        return (this.group != null && this.b_sharing) ? this.group._b_manager : this._b_manager
     }
-    choose_action(state, mode = "uniform"){
-        if (Math.random() < this.epsilon){
-            switch(mode){
-            case "uniform":
-                return util.randomChoice(this.actions)
-            case "weight":
-                var values = this.getQValueForState(state)
-                var min_value = Math.min(...values)
-                values = util.vConstAdd(values, -min_value)
 
-                
-                var sum = values.reduce((a, b) => a+b, 0)
-                if(sum == 0){
-                    return util.randomChoice(this.actions)
-                }
-                values = util.vConstMul(values, 1/sum)
-                var p = Math.random()
-                for(var i=0 ; i<values.length ; i++){
-                    if(p < values[i]){
-                        return this.actions[i]
-                    }else{
-                        p -= values[i]
-                    }
-                }
-                console.log("선택 못함")
-                return 0
-            }
-            
-        }else{
-            var values = this.getQValueForState(state)
-            
-            var max_value = Math.max(...values)
-            var max_index_list = []
-            for(var i=0 ; i<values.length ; i++){
-                if (values[i] == max_value){
-                    max_index_list.push(i)
-                } 
-            }
-            var index = util.randomChoice(max_index_list)
-            return this.actions[index]
-        }
+    get memory(){
+        return (this.group != null && this.memory_sharing) ? this.group._memory : this._memory
     }
     
     start(state){
         this.finished = false
         this.past_state = state;
-        this.past_action = this.choose_action(state);
+        this.past_action = this.policy.choose_action(state);
         return this.past_action;
-    }
-    
-    get_memory(){
-        if(this.group != null && this.memory_sharing){
-            return this.group.memory
-        }else{
-            return this.memory
-        }
     }
 
     step(reward, state, finished){
         if(finished == true){
             console.log("finished")
         }
-        
-        reward += this.default_reward//*(Math.floor(Agent.total_step/1000))
 
-        var memory = this.get_memory()
-        if(memory.count_state_action_and_check_first(state, this.past_action)){ // first state action??
-            if(this.use_curiosity){
-                // reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
-                // reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
-            }
-            this.first_state_action.invoke(state, this.past_action)
+        reward += this.default_reward
+
+        var e_reward = this.q_manager.is_mutation(this.past_state, this.past_action, reward)
+        e_reward = Math.max(0, e_reward-0.1)
+        if(e_reward < 0.3){
+            e_reward = 0
+            console.log("e_reward", 0)
+        }else{
+            console.log("e_reward", e_reward)
         }
 
-        // reward -= (memory.get_state_action_num(state, this.past_action)/100000)**(1/100)/10000
+        this.e_manager.update(this.past_state, this.past_action, e_reward, state, finished)
 
-        if(memory.count_state_and_check_first(state)){ // first visit??
-            this.first_state.invoke(state)
-            if(this.use_curiosity){
-                reward += this.curiosity_reward*(1 + this.get_memory().action_memory.size**(1/2))
-                // reward += this.curiosity_reward*(this.get_memory().action_memory.size%10 == 1 ? 1 : 0)
-            }
-        }        
+        this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
+
+        var boring_reward = 0
+        if(this.memory.count_state_action_and_check_first(this.past_state, this.past_action)){
+            boring_reward += this.curiosity_reward*(1 + this.memory.get_state_action_num(this.past_state, this.past_action)**(1/2))
+        }
+        if(this.memory.count_state_and_check_first(state)){
+               
+        }   
 
 
-        var mutation = this.get_model().update(this.past_state, this.past_action, reward, state, finished)
-        // if(mutation == true){
-        //     this.get_model().empty()
-        //     console.log("empty")
-        // }
-        this.planning(this.planning_step)
+        this.memory.count_state_action_and_check_first(state, action)
+        boring_reward += this.repeat_penalty*(this.memory.get_state_action_num(this.past_state, this.past_action))**(1/2)
 
-        // update value
-        this.update_q_value(this.past_state, this.past_action, reward, state, finished)
+        
+        this.b_manager.update(this.past_state, this.past_action, boring_reward, state, finished)
 
+        // planning
+        this.q_manager.planning()
+        this.e_manager.planning()
+        this.b_manager.planning()
+        
         // select action
-        var action = this.choose_action(state)
-
-
-
+        var action = this.get_policy().choose_action(state)
+        
         // memorize state, action
         this.past_state = state
         this.past_action = action
 
         // update tau
-        this.updateTau(this.past_state, this.past_action)
+        this.get_tau_value_table().update(this.past_state, this.past_action)
 
         this.total_step += 1
         this.after_step_callback.invoke()
@@ -878,59 +1252,15 @@ class Agent{
         return this.past_action
     }
 
-    updateTau(state, action){
-        var tau_table = this.get_tau_table()
-        for(var i=0 ; i<tau_table.length ; i++){
-            tau_table[i] = util.vAdd(tau_table[i], util.ones([tau_table[i].length]))
-        }
-        tau_table[state][action] = 0
-    }
-    
-    update_q_value(state, action, reward, next_state, finished){
-        var next_return = (finished) ? 0 : this.gamma*Math.max(...this.get_q_value_table()[next_state])
-        var cur_return = reward + next_return
-        var cur_value = this.get_q_value_table()[state][action]
-        var delta = cur_return - cur_value
-        this.get_q_value_table()[state][action] += this.step_size*delta
-
-        this.after_update_q_value_callbacks.invoke(state, this.get_q_value_table()[state])
-    }
-
-    // end(state, reward){
-    //     this.step()
-    //     this.update_q_value(this.past_state, this.past_action, reward, -1)
-    //     this.past_state = state
-    //     this.finished = true
-    //     this.total_step += 1
-    //     this.after_step_callback.invoke()
-    // }
-
-
-    planning(step_num){
-        for(var i=0 ; i<step_num ; i++){
-            var sample = this.get_model().get_sample()
-            if(sample != null){
-                var state, action, reward, next_state, finished
-                [state, action, reward, next_state, finished] = sample
-                if(finished == true){
-                    console.log("finished planning")
-                }
-                console.log(state, action, reward, next_state, finished)
-                this.update_q_value(state, action, reward, next_state, finished)
-            }else{
-                break
-            }
-        }
-    }
 }
 
 class FrozenLake{
-    constructor(map_size){
+    constructor(map_size, frozen_ratio){
         this.map_size = map_size
         this.state_list = util.range(0, map_size*map_size)
         this.action_list = util.range(0, 4)
         
-        this.frozen_ratio = 0.7
+        this.frozen_ratio = frozen_ratio
         this.map = this.generateRandomMap(this.map_size, this.frozen_ratio)
     }
 
@@ -1103,15 +1433,15 @@ class FrozenLake{
 
 
 class Operator{
-    constructor(map_size, agent_num){
+    constructor(map_size, agent_num, frozen_ratio){
         
         this.agent_num = agent_num
         this.body = document.body;
         this.map_size = map_size
-        this.env = new FrozenLake(map_size)
+        this.env = new FrozenLake(map_size, frozen_ratio)
         this.informationViewer = new InformationViewer();
 
-        
+        this.cellInforView = new CellInforView()
         // agentGroup
         this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
         this.agentGroup.goal_callback.add(() => this.informationViewer.goal += 1)
@@ -1120,11 +1450,13 @@ class Operator{
         this.agentGroup.first_state.add((state) => {this.informationViewer.state += 1
         })
         this.agentGroup.first_state_action.add((state, action) => this.informationViewer.state_action += 1)
-        this.agentGroup.after_update_q_value_callbacks.add((state, updated_q_values) => {
+        this.agentGroup.after_action_value_update_callback.add((state, action) => {
             var x, y
             [x, y] = this.env.state_to_coordinate(state)
-            this.env_view.setValue(x, y,  Math.floor(Math.max(...updated_q_values) *100)/100)
-            this.env_view.setQvalues(x, y, updated_q_values)
+            var state_value = this.agentGroup.agents[0].get_policy().getStateValue(state)
+            var action_value = this.agentGroup.agents[0].get_policy().getValueForState(state)
+            this.env_view.setValue(x, y,  Math.floor(state_value*100)/100)
+            this.env_view.setArrows(x, y, action_value)
         })
 
         this.agents = []
@@ -1141,14 +1473,36 @@ class Operator{
             type = (type == "H")? "F" : "H"
             var success = this.env.modify(state, type)
             if(success){
-                this.env_view.applyMap(this.env.getMap())
-                this.env_view.setRewardMap(this.env.getRewardMap())
+                // this.env_view.setStateMap(this.env.getMap())
+                // this.env_view.setRewardMap(this.env.getRewardMap())
+                this.env_view.setState(x, y, this.env.getMap()[y][x])
+                this.env_view.setReward(x, y, this.env.getRewardMap()[y][x])
+                // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
             }
+            // this.env_view.setArrowsMap(this.agentGroup)/
         })
-        this.env_view.applyMap(this.env.getMap())
+        this.env_view.setStateMap(this.env.getMap())
+        // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
         this.env_view.setRewardMap(this.env.getRewardMap())
         this.body.appendChild(this.env_view.getElement())
         this.body.appendChild(this.informationViewer.getElement())
+        this.body.appendChild(this.cellInforView.getElement())
+    }
+
+    update_cell_view(state){
+        this.cellInforView.q_value = this.agents[0].q_manager.get_values_for_state(state)
+        this.cellInforView.q_mean = this.agents[0].q_manager.get_reward_means_for_state(state)
+        this.cellInforView.q_std = this.agents[0].q_manager.get_reward_standard_deviations_for_state(state)
+
+        this.cellInforView.e_value = this.agents[0].e_manager.get_values_for_state(state)
+        this.cellInforView.e_mean = this.agents[0].e_manager.get_reward_means_for_state(state)
+        this.cellInforView.e_std = this.agents[0].e_manager.get_reward_standard_deviations_for_state(state)
+
+        this.cellInforView.b_value = this.agents[0].b_manager.get_values_for_state(state)
+        this.cellInforView.b_mean = this.agents[0].b_manager.get_reward_means_for_state(state)
+        this.cellInforView.b_std = this.agents[0].b_manager.get_reward_standard_deviations_for_state(state)
+
+        this.cellInforView.tau = this.agents[0].tau_value_table.get_taus_for_state(state)
     }
 
     one_step(agent_idx){
@@ -1174,12 +1528,12 @@ class Operator{
             [nx, ny] = this.env.state_to_coordinate(state)
             this.env_view.showAgent(nx, ny, agent_idx, true)
             
-            var valueMap = agent.getValueMap()
-            for(var i=0 ; i<valueMap.length ; i++){
-                let x, y
-                [x, y] = this.env.state_to_coordinate(i)
-                this.env_view.setValue(x, y, valueMap[i])
-            }
+            // var valueMap = agent.getQValueMap()
+            // for(var i=0 ; i<valueMap.length ; i++){
+            //     let x, y
+            //     [x, y] = this.env.state_to_coordinate(i)
+            //     this.env_view.setValue(x, y, valueMap[i])
+            // }
             // 끝난 경우
             if (done == true){
                 if(state == this.map_size**2-1){
@@ -1194,7 +1548,7 @@ class Operator{
                 return false
             }
         }
-
+        
     }
 
     async one_episode(agent_idx, freq){
@@ -1237,6 +1591,7 @@ class Operator{
             // for(var i=0 ; i<this.agent_num ; i++){
             for(var i=0 ; i<this.agent_num ; i++){
                 await this.one_step(i)
+                this.update_cell_view(1)
                 await wait(freq)
                 // break
             }
@@ -1285,11 +1640,72 @@ class Operator{
 //     operator.initAgent(0)
 //     await operator.one_episode(1)
 // }
+class Slider{
+    constructor(name="name", value = 0){
+        [this.element, this._name, this._value, this.slider] = this.createElement()
+        this.OnInputCallback = new Callback_1()
+        this.OnInputCallback.add((a) => console.log(a.value)) 
+        this.name = name
+        this.value = value
+    }
+    getElement(){
+        return this.element
+    }
+    createElement(name){
+        var element = document.createElement("div");
+        element.innerHTML = `
+        <div><span></span>:<span></span></div>
+        <div><input type="range" name="points" min="0" max="1.0" step="0.01" value="0"></div>
+        `
+        var name = element.getElementsByTagName("span")[0]
+        var value = element.getElementsByTagName("span")[1]
 
+        var slider = element.getElementsByTagName("input")[0]
+        
+        slider.oninput = () => {value.innerHTML=slider.value}
+        slider.onchange = (value) => this.OnInputCallback.invoke(value)
+        return [element, name, value, slider]
+    }
+    get name(){
+        return this._name.innerHTML
+    }
+    set name(value){
+        this._name.innerHTML = value
+    }
 
+    get value(){
+        return this._value.innerHTML
+    }
+    set value(v){
+        this._value.innerHTML = v
+    }
+}
+// slider = new Slider()
+// document.body.appendChild(slider.getElement())
+
+// class ControlView{
+//     constructor(){
+//         this.element = this.createElement()
+//         this.element
+//     }
+
+//     getElement(){
+//         return this.element
+//     }
+//     createElement(){
+        
+//         var element = document.createElement("div");
+//         element.className = "controlView"
+//         this.element.innerHTML = `
+            
+        
+//     `
+//     }
+// }
 
 class InformationViewer{
     constructor(){
+        
         this.element = this.createElement()
 
         this._goal = 0
@@ -1360,7 +1776,7 @@ document.getElementById("initialize_button").addEventListener('click',() => {
         operator.env_view.element.remove()
         operator.informationViewer.element.remove()
     }
-    operator = new Operator(5, 3)
+    operator = new Operator(10, 1, 0.9)
 })
 
 
@@ -1372,3 +1788,116 @@ document.getElementById("one_episode_button").addEventListener('click',() => {op
     operator.one_episode(1000)});
 
 
+class CellInforView{
+    constructor(){
+        this.element = this.createElement()
+
+        this._q_value = [0, 0, 0, 0]
+        this._q_mean = [0, 0, 0, 0]
+        this._q_std = [0, 0, 0, 0]
+
+        this._e_value = [0, 0, 0, 0]
+        this._e_mean = [0, 0, 0, 0]
+        this._e_std = [0, 0, 0, 0]
+
+        this._b_value = [0, 0, 0, 0]
+        this._b_mean = [0, 0, 0, 0]
+        this._b_std = [0, 0, 0, 0]
+
+        this._tau = [0, 0, 0, 0]
+
+        this.update()
+    }
+    
+    getElement(){
+        return this.element
+    }
+    createElement(){
+        var element = document.createElement("div");
+        return element
+    }
+
+    get q_value(){return this._q_value}
+    set q_value(value){
+        this._q_value = value
+        this.update()
+    }
+
+    get q_mean(){return this._q_mean}
+    set q_mean(value){
+        this._q_mean = value
+        this.update()
+    }
+
+    get q_std(){return this._q_std}
+    set q_std(value){
+        this._q_std = value
+        this.update()
+    }
+    
+    get e_value(){return this._e_value}
+    set e_value(value){
+        this._e_value = value
+        this.update()
+    }
+
+    get e_mean(){return this._e_mean}
+    set e_mean(value){
+        this._e_mean = value
+        this.update()
+    }
+
+    get e_std(){return this._e_std}
+    set e_std(value){
+        this._e_std = value
+        this.update()
+    }
+    get b_value(){return this._b_value}
+    set b_value(value){
+        this._b_value = value
+        this.update()
+    }
+
+    get b_mean(){return this._b_mean}
+    set b_mean(value){
+        this._b_mean = value
+        this.update()
+    }
+
+    get b_std(){return this._b_std}
+    set b_std(value){
+        this._b_std = value
+        this.update()
+    }
+    get tau(){return this._tau}
+    set tau(value){
+        this._tau = value
+        this.update()
+    }
+
+    update(){
+        this.element.innerHTML = ""
+        var labels = ["TOP", "BOTTOM", "LEFT", "RIGHT"]
+        for(var i=0 ; i<4 ; i++){
+            this.element.innerHTML += `
+            <div style="display: inline-block; border_color:black;">
+                <div>${labels[i]}</div>
+                <div>Q_value: ${Math.floor(this.q_value[i]*100)/100}</div>
+                <div>Q_mean: ${Math.floor(this.q_mean[i]*100)/100}</div>
+                <div>Q_std: ${Math.floor(this.q_std[i]*100)/100}</div>
+
+                <div>E_value: ${Math.floor(this.e_value[i]*100)/100}</div>
+                <div>E_mean: ${Math.floor(this.e_mean[i]*100)/100}</div>
+                <div>E_std: ${Math.floor(this.e_std[i]*100)/100}</div>
+
+                <div>B_value: ${Math.floor(this.b_value[i]*100)/100}</div>
+                <div>B_mean: ${Math.floor(this.b_mean[i]*100)/100}</div>
+                <div>B_std: ${Math.floor(this.b_std[i]*100)/100}</div>
+
+                <div>Tau: ${this.tau[i]}</div>
+            </div>
+        `
+        }
+        
+    }
+}
