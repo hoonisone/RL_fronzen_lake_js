@@ -1600,10 +1600,10 @@ class Operator{
             this.get_selected_agent().epsilon = value
         })
         
-        this.kappaSlider = new Slider("Kappa", 0.5)
+        this.kappaSlider = new Slider("Kappa(x0.1)", 0.5)
         this.body.appendChild(this.kappaSlider.getElement())
         this.kappaSlider.OnInputCallback.add((value) => {
-            this.get_selected_agent().kappa = value
+            this.get_selected_agent().kappa = value*0.1
         })
         
         this.gammaSlider = new Slider("Gamma", 0.5)
@@ -1793,6 +1793,7 @@ class Slider{
         this.name = name
         this.value = value
         this.OnInputCallback.add((value) => this.value=value)
+        this.slider.value = value
     }
     getElement(){
         return this.element
