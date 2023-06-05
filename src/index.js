@@ -1202,14 +1202,14 @@ class Agent{
 
         // policy 
         this.qw = 1
-        this.tw = 0.000000
+        this.tw = 0.00001
 
         // reward
         this.default_reward = -0.01
         this.curiosity_reward = 0.001
         this.repeat_penalty = -0.01
 
-        this.epsilon = 0.00
+        this.epsilon = 0.01
 
         // basic element
         this.states = states
@@ -1519,7 +1519,7 @@ class Operator{
         this.map_size = map_size
         this.env = new FrozenLake(map_size, frozen_ratio)
         this.informationViewer = new InformationViewer();
-        this.speed = 1000
+        this.speed = 100
         this.cellInforView = new CellInforView()
         // agentGroup
         this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
@@ -1568,8 +1568,8 @@ class Operator{
         this.body.appendChild(this.informationViewer.getElement())
         this.body.appendChild(this.cellInforView.getElement())
 
-        this.speedSlider = new Slider("Speed", 1)
-        this.speedSlider.OnInputCallback.add((value) => this.speed = ((1-value**(1/4)))*1000)
+        this.speedSlider = new Slider("Speed", 0.5)
+        this.speedSlider.OnInputCallback.add((value) => this.speed = (1000**(1-value)))
         this.body.appendChild(this.speedSlider.getElement()) 
     }
 
@@ -1715,6 +1715,7 @@ class Slider{
         this.OnInputCallback = new Callback_1() 
         this.name = name
         this.value = value
+        this.OnInputCallback.add((value) => this.value=value)
     }
     getElement(){
         return this.element
@@ -1730,8 +1731,7 @@ class Slider{
 
         var slider = element.getElementsByTagName("input")[0]
         
-        slider.oninput = () => {value.innerHTML=slider.value}
-        slider.onchange = () => this.OnInputCallback.invoke(this.value)
+        slider.oninput = () => {this.OnInputCallback.invoke(slider.value)}
         return [element, name, value, slider]
     }
     get name(){
