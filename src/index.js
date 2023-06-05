@@ -69,6 +69,16 @@ class util{
         v = [...v]
         return v.reduce((a, b) => a+b, 0)
     }
+    static argProbability(probabilities){
+        var p = Math.random()
+        for(var i=0 ; i<probabilities.length ; i++){
+            if(p < probabilities[i]){
+                return [i]
+            }
+            p -= probabilities[i]
+        }
+        return null
+    }
 
     static randomChoice(items){
         var index = Math.floor(Math.random() * items.length);
@@ -715,11 +725,11 @@ class GausianModel{
 
     is_mutation(value){
         var z = Math.abs(value-this.mean)/(this.variance**(0.5))
-        // console.log("z", z)
-        // console.log("value", value)
-        // console.log("mean", this.mean)
-        // console.log("variance", this.variance)
-        // console.log("@@@@@@@@@", (1-Math.exp(-(z)))**10)
+        console.log("z", z)
+        console.log("value", value)
+        console.log("mean", this.mean)
+        console.log("variance", this.variance)
+        console.log("@@@@@@@@@", (1-Math.exp(-(z)))**10)
         return (1-Math.exp(-(z)))**10
     }
 
@@ -833,36 +843,14 @@ class Policy{
         return util.vAdd(util.vAdd(qValue, eValue), util.vAdd(bValue, tValue))
     }
 
-    choose_action(state, mode = "greedy"){
+    choose_action(state){
         var values = this.getValueForState(state)
         if (Math.random() < this.epsilon){
             return util.randomChoice(this.agent.actions)            
         }else{
-            if(mode == "greedy"){
-                var max_index_list = util.argMax(values, {all:true})
-                var index = util.randomChoice(max_index_list)
-                return this.agent.actions[index]
-            }else{
-                var min_value = Math.min(...values)
-
-                values = util.vConstAdd(values, -min_value)
-                values = util.vConstAdd(values, 0.01)
-                var sum = util.sum(values)
-                if(sum == 0){
-                    return this.choose_action(state, mode="greedy")
-                }
-                values = util.vConstMul(values, (1/sum))
-                var p = Math.random()
-                for(var i=0 ; i<values.length ; i++){
-                    if(p < values[i]){
-                        return this.agent.actions[i]
-                    }
-                    p -= values[i]
-                }
-                return 0
-            }
-
-
+            var max_index_list = util.argMax(values, {all:true})
+            var index = util.randomChoice(max_index_list)
+            return this.agent.actions[index]
         }
     }
 
@@ -890,9 +878,9 @@ class SoftMaxPolicy extends Policy{
             for(var i=0 ; i<values.length ; i++){
                 values[i] = Math.exp(values[i])
             }
-            var max_index_list = util.argMax(values, {all:true})
-            var index = util.randomChoice(max_index_list)
-            return this.agent.actions[index]
+            var sum = util.sum(values)
+            values = util.vConstMul(values, 1/sum)
+            return this.agent.actions[util.argProbability(values)]
         }
 }
 
@@ -971,6 +959,21 @@ class ActionRewardModel{
         }
     }
 
+    reset(state, action){
+        for(var i=samples.length-1 ; i>=0 ; i--){
+            var _state, _action, next_state, finished
+            [_state, _action, next_state, finished] = samples[i]
+            if(state == _state){
+                delete samples[i]
+            }
+            else if(state == _state && action == _action){
+                delete samples[i]
+            }
+            // this.reward_model_table[state][action].mean = 0
+            // this.reward_model_table[state][action].variance = 0
+        }
+    }
+
     update(state, action, reward, next_state, finished){
         this.reward_model_table[state][action].update(reward)
         if (this.max_size < this.samples.length){
@@ -1031,7 +1034,7 @@ class RewardManager{
         this.seg_arg(args[0])
 
         this.value_table = new ActionValueTable(states, actions, this.default_value, this.value_update_ratio, this.discounting_factor)
-        this.reward_model = new ActionRewardModel(states, actions, this.mean, this.variance, this.model_update_ratio, {no_variance : true}) 
+        this.reward_model = new ActionRewardModel(states, actions, this.mean, this.variance, this.model_update_ratio, {no_variance : false}) 
         
         this.after_action_value_update_callback = new Callback_2() // state, action
     }
@@ -1148,7 +1151,7 @@ class Agent{
         this.qw = 1
         this.ew = 1
         this.bw = 1
-        this.tw = 0.01
+        this.tw = 0.0001
 
         // reward
         this.default_reward = -0.01
@@ -1167,8 +1170,8 @@ class Agent{
 
         this._memory = new Memory(states, actions)
 
-        // this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
-        this.policy = new SoftMaxPolicy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
+        this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
+        // this.policy = new SoftMaxPolicy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
         
         var q_value_manager_args = {
             default_value : 0,
@@ -1270,12 +1273,17 @@ class Agent{
         reward += this.default_reward
         var count = this.memory.state_action_count_table[this.past_state][this.past_action]
         
-        if(10 < count){
+        if(3 < count){
             var e_reward = this.q_manager.is_mutation(this.past_state, this.past_action, reward)
+            console.log("e_reward", e_reward)
             e_reward = Math.max(0, e_reward-0.1)
-            if(e_reward < 0.1){
+            if(e_reward < 0.01){
                 e_reward = 0
             }else{
+                this.q_manager.reset(this.past_state, this.past_action)
+                this.e_manager.reset(this.past_state, this.past_action)
+                this.b_manager.reset(this.past_state, this.past_action)
+                console.log("삭제")
             }
             this.e_manager.update(this.past_state, this.past_action, e_reward, state, finished)
         }
@@ -1443,14 +1451,20 @@ class FrozenLake{
     
     step(state, action){
         var next_state = this.get_next_state(state, action)
+        if(this.get_type(next_state) == "H"){
+            next_state = 0
+        }
+
         var reward = this.reward(next_state)
+        var finished = this.is_done(next_state)
         return [next_state, reward, this.is_done(next_state)]
     }
     
     is_done(state){
         let x, y
         [x, y] = this.state_to_coordinate(state)
-        return (this.map[y][x] == "G") || (this.map[y][x] == "H")
+        return (this.map[y][x] == "G")
+        // return (this.map[y][x] == "G") || (this.map[y][x] == "H")
     }
         
     
@@ -1489,7 +1503,7 @@ class FrozenLake{
     }
     
     reward(state){
-        var state_reward = {"S": 0, "F":0, "H":-1, "G":1}
+        var state_reward = {"S": 0, "F":0, "H":0, "G":1}
         var x, y
         if (state == -1){
             return 0
@@ -1848,7 +1862,7 @@ document.getElementById("initialize_button").addEventListener('click',() => {
         operator.env_view.element.remove()
         operator.informationViewer.element.remove()
     }
-    operator = new Operator(10, 1, 0.9)
+    operator = new Operator(5, 1, 0.9)
 })
 
 
