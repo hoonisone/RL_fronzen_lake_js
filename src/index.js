@@ -646,10 +646,10 @@ class AgentGrupe{
 
         // this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.tw)
 
-        // this.q_value_table = new ActionValueTable(states, actions, this.q_default_value, this.q_step_size, this.q_gamma)
+        // this.q_value_table = new ActionValueModel (states, actions, this.q_default_value, this.q_step_size, this.q_gamma)
         // this.q_value_model = new ActionRewardModel(states, actions, this.q_model_mean, this.q_model_variance, this.q_model_step_size)
 
-        // this.e_value_table = new ActionValueTable(states, actions, this.e_default_value, this.e_step_size, this.e_gamma)
+        // this.e_value_table = new ActionValueModel (states, actions, this.e_default_value, this.e_step_size, this.e_gamma)
         // this.e_value_model = new ActionRewardModel(states, actions, this.e_model_mean, this.e_model_variance, this.e_model_step_size, false)
 
         // this.tau_value_table = new ActionTauTable(states, actions)
@@ -696,19 +696,45 @@ class AgentGrupe{
 class GausianModel{
     static MIN_VARIANCE = 0.0000000000000000000001 // 최소 분산 (to avoid zero divide)
     constructor(mean, variance, update_ratio=0.1, no_variance = false){
-        this.mean = 0;
-        this.variance = GausianModel.MIN_VARIANCE; 
+        this.mean = mean;
+        this.variance = variance; 
         this.update_ratio = update_ratio
         this.n = 0
         this.no_variance = no_variance
+
+        this.stable = false
+        this.mean_p_value = 0
     }   
 
     update(value){
+        var changed_unstable = this.update_stable(value)
+        
         this.n += 1
         var update_ratio = Math.max((1/this.n), this.update_ratio)
         this.mean += update_ratio*(value - this.mean)
         this.variance += update_ratio*((value - this.mean)**2 - this.variance)
         this.variance = Math.max(this.variance, GausianModel.MIN_VARIANCE)
+
+        return changed_unstable
+    }
+
+    update_stable(value){
+        var p_value = this.p_value(value)
+        this.mean_p_value += 0.1*(p_value - this.mean_p_value)
+        // console.log("mean_p_value", this.mean_p_value)
+        // console.log("stable", this.stable)
+        // console.log("value", value)
+        // console.log("p_value", p_value)
+
+        if((this.stable == true) && (p_value < 0.05)){
+            this.stable = false
+            this.mean_p_value = 0
+            return true
+        }
+        if(this.stable == false && this.mean_p_value > 0.9){
+            this.stable = true
+        }
+        return false
     }
 
     get_value(){
@@ -723,14 +749,9 @@ class GausianModel{
         // this.mean + this.update_ratio
     }
 
-    is_mutation(value){
+    p_value(value){
         var z = Math.abs(value-this.mean)/(this.variance**(0.5))
-        console.log("z", z)
-        console.log("value", value)
-        console.log("mean", this.mean)
-        console.log("variance", this.variance)
-        console.log("@@@@@@@@@", (1-Math.exp(-(z)))**10)
-        return (1-Math.exp(-(z)))**10
+        return Math.exp(-z)
     }
 
     get_mean(){
@@ -745,7 +766,6 @@ class GausianModel{
         return this.variance**(1/2)
     }
 }
-
 
  class Memory{
     constructor(states, actions){
@@ -832,15 +852,11 @@ class Policy{
     }
     getValueForState(state){
         var qValue = this.getQValueForState(state)
-        var eValue = this.getEValueForState(state)
-        var bValue = this.getBValueForState(state)
         var tValue = this.getTValueForState(state)
         qValue = util.vConstMul(qValue, this.qw)
-        eValue = util.vConstMul(eValue, this.ew)
-        bValue = util.vConstMul(bValue, this.bw)
         tValue = util.vConstMul(tValue, this.tw)
         
-        return util.vAdd(util.vAdd(qValue, eValue), util.vAdd(bValue, tValue))
+        return util.vAdd(qValue, tValue)
     }
 
     choose_action(state){
@@ -910,39 +926,59 @@ class WeightPolicy extends Policy{
         }
 }
 
-
-class ActionValueTable{
-    constructor(states, actions, default_value = 0, step_size = 0.1, gamma = 0.99){
+class ActionValueModel{
+    constructor(states, actions, mean, variance, step_size = 0.1, gamma = 0.99){
         this.states = states
         this.actions = actions
-        this.default_value = default_value
+        this.mean = mean
+        this.variance = variance
         this.step_size = step_size
         this.gamma = gamma
-        this.value_table = util.ndarray([states.length, actions.length], this.default_value)
+        this.value_table = util.ndarray([states.length, actions.length], 0)
+        for(var state=0 ; state<states.length ; state++){
+            for(var action=0 ; action<actions.length ; action++){
+                this.value_table[state][action] = this.create_gausian_model()
+            }
+        }
+    }
+    create_gausian_model(){
+        return new GausianModel(this.mean, this.variance, this.step_size, false)
+    }
 
-        
+    reset(state, action ,next_state){
+        // this.value_table[state][action] = this.create_gausian_model()
+
+        // for(var action=0 ; action<actions.length ; action++){
+        //     this.value_table[next_state][action] = new GausianModel(0, 1, step_size, false)
+        // }
     }
 
     update(state, action, reward, next_state, finished){
-        // console.log(state, action, reward, next_state, finished)
-        var next_return = (finished) ? 0 : this.gamma*Math.max(...this.value_table[next_state])
+        var next_return = (finished == true) ? 0 : this.gamma*Math.max(...this.get_values_for_state(next_state))
         var cur_return = reward + next_return
-        var cur_value = this.value_table[state][action]
-        var delta = cur_return - cur_value
-        this.value_table[state][action] += this.step_size*delta
+
+        var changed_unstable = this.value_table[state][action].update(cur_return)
+        return changed_unstable
     }
     getValueMap(){
         let valueMap = []
         for(var i=0 ; i<this.states.length; i++){
-            var qValues  = this.value_table[this.states[i]]
+            var qValues  = []
+            for(var x in this.value_table[this.states[i]]){
+                aValue.push(x.mean)
+            }
+            
             var maxQValues = Math.max(...qValues)
             valueMap.push(Math.floor(maxQValues*100)/100)
         }
         return valueMap
     }
-
     get_values_for_state(state){
-        return this.value_table[state]
+        var qValues  = []
+        for(var x of this.value_table[state]){
+            qValues.push(x.mean)
+        }
+        return qValues
     }
 
 }
@@ -952,26 +988,42 @@ class ActionRewardModel{
         this.max_size = 10000
         this.samples = []
         this.reward_model_table = util.ndarray([states.length, actions.length], 0)
+        
+        this.mean = mean
+        this.variance = variance
+        this.update_ratio = update_ratio
+        this.no_variance = no_variance
+        
+        this.states = states
+        this.actions = actions
+
         for(var state=0 ; state<states.length ; state++){
             for(var action=0 ; action<actions.length ; action++){
-                this.reward_model_table[state][action] = new GausianModel(mean, variance, update_ratio, no_variance)
+                this.reward_model_table[state][action] = new GausianModel(mean, variance, update_ratio, true)
             }
         }
     }
 
-    reset(state, action){
-        for(var i=samples.length-1 ; i>=0 ; i--){
-            var _state, _action, next_state, finished
-            [_state, _action, next_state, finished] = samples[i]
-            if(state == _state){
-                delete samples[i]
-            }
-            else if(state == _state && action == _action){
-                delete samples[i]
+    reset(state, action, next_state){
+        for(var a=0 ; a<this.actions.length ; a++){
+            this.reward_model_table[state][a] = new GausianModel(this.mean, this.variance, this.update_ratio, true)
+        }
+
+        // for(var action=0 ; action<actions.length ; action++){
+        //     this.reward_model_table[next_state][action] = new GausianModel(this.mean, this.variance, this.update_ratio, this.no_variance)
+        // }
+        var new_samples = []
+        for(var i=this.samples.length-1 ; i>=0 ; i--){
+            var _state, _action, _next_state, finished
+            [_state, _action, next_state, finished] = this.samples[i]
+            if((state != _state || action != _action) && (state != _next_state)){
+                new_samples.push(this.samples[i])
             }
             // this.reward_model_table[state][action].mean = 0
             // this.reward_model_table[state][action].variance = 0
         }
+        console.log("Deleted", this.samples.length - new_samples.length)
+        this.samples = new_samples
     }
 
     update(state, action, reward, next_state, finished){
@@ -982,9 +1034,8 @@ class ActionRewardModel{
         this.samples.push([state, action, next_state, finished])
     }
 
-    is_mutation(state, action, reward){
-    `발생하기 어려운 케이스인가?`
-        return this.reward_model_table[state][action].is_mutation(reward)
+    p_value(state, action, reward){
+        return this.reward_model_table[state][action].p_value(reward)
     }
 
     get_sample(){
@@ -1019,75 +1070,75 @@ class ActionRewardModel{
 class RewardManager{
     constructor(states, actions, ...args){
         // value table
-        this.default_value = 0
-        this.value_update_ratio = 0.1
+        this.q_value_mean = 0
+        this.q_value_variance = 1
+        this.q_value_update_ratio = 0.1
         this.discounting_factor = 0.99
 
         // reward model
-        this.mean = 0
-        this.variance = 0
-        this.model_update_ratio = 0.1
+        this.reward_mean = 0
+        this.reward_variance = 0
+        this.reward_update_ratio = 0.1
 
         // planning
         this.planning_num = 100
 
         this.seg_arg(args[0])
 
-        this.value_table = new ActionValueTable(states, actions, this.default_value, this.value_update_ratio, this.discounting_factor)
-        this.reward_model = new ActionRewardModel(states, actions, this.mean, this.variance, this.model_update_ratio, {no_variance : false}) 
+        this.value_table = new ActionValueModel(states, actions, this.q_value_mean, this.q_value_variance, this.q_value_update_ratio, this.discounting_factor)
+        this.reward_model = new ActionRewardModel(states, actions, this.reward_mean, this.reward_variance, this.reward_update_ratio, {no_variance : false}) 
         
         this.after_action_value_update_callback = new Callback_2() // state, action
     }
 
     seg_arg(args){
-        // value table
-        this.default_value = (args.default_value != null)?args.default_value:this.default_value
-        this.value_update_ratio = (args.value_update_ratio != null)?args.value_update_ratio:this.value_update_ratio
+        // value model
+        this.q_value_mean = (args.q_value_mean != null)?args.q_value_mean:this.q_value_mean
+        this.q_value_variance = (args.q_value_variance != null)?args.q_value_variance:this.q_value_variance
+        this.q_value_update_ratio = (args.q_value_update_ratio != null)?args.q_value_update_ratio:this.q_value_update_ratio
         this.discounting_factor = (args.discounting_factor != null)?args.discounting_factor:this.discounting_factor
 
         // reward model
-        this.mean = (args.mean != null)?args.mean:this.mean
-        this.variance = (args.variance != null)?args.variance:this.variance
-        this.model_update_ratio = (args.model_update_ratio != null)?args.model_update_ratio:this.model_update_ratio
+        this.reward_mean = (args.reward_mean != null)?args.reward_mean:this.reward_mean
+        this.reward_variance = (args.reward_variance != null)?args.reward_variance:this.reward_variance
+        this.reward_update_ratio = (args.reward_update_ratio != null)?args.reward_update_ratio:this.reward_update_ratio
 
         // planning
         this.planning_num = (args.planning_num != null)?args.planning_num:this.planning_num
 
+        // check arg
         console.log("args", args)
 
-        console.log(args.default_value != null)
-        console.log(args.value_update_ratio != null)
+        console.log(args.q_value_mean != null)
+        console.log(args.q_value_variance != null)
+        console.log(args.q_value_update_ratio != null)
         console.log(args.discounting_factor != null)
 
-        console.log(args.mean != null)
-        console.log(args.variance != null)
-        console.log(args.model_update_ratio != null)
+        console.log(args.reward_mean != null)
+        console.log(args.reward_variance != null)
+        console.log(args.reward_update_ratio != null)
 
         console.log(args.planning_num != null)
 
-        console.log(this.default_value)
-        console.log(this.value_update_ratio)
+        // check setting value
+        console.log(this.q_value_mean)
+        console.log(this.q_value_variance)
+        console.log(this.q_value_update_ratio)
         console.log(this.discounting_factor)
 
-        console.log(this.mean)
-        console.log(this.variance)
-        console.log(this.model_update_ratio)
+        console.log(this.reward_mean)
+        console.log(this.reward_variance)
+        console.log(this.reward_update_ratio)
 
         console.log(this.planning_num)
-   
     }
 
-    recaculate_reward(state, action, reward, next_state){
-        `배정된 욕구에 대한 리워드를 다시 계한`
-        return reward
-    }
 
     update(state, action, reward, next_state){
-        reward = this.recaculate_reward(state, action, reward, next_state)
-        this.value_table.update(state, action, reward, next_state)
+        var p_value = this.value_table.update(state, action, reward, next_state)
         this.reward_model.update(state, action, reward, next_state)
         this.after_action_value_update_callback.invoke(state, action)
-
+        return p_value
     }
 
     planning(){
@@ -1102,6 +1153,11 @@ class RewardManager{
             this.value_table.update(state, action, reward, next_state, finished)
             this.after_action_value_update_callback.invoke(state, action)            
         }
+    }
+
+    reset(state, action, next_state){
+        this.value_table.reset(state, action, next_state)
+        this.reward_model.reset(state, action, next_state)
     }
 
     getValueMap(){
@@ -1124,8 +1180,8 @@ class RewardManager{
         return this.reward_model.get_standard_deviations_for_state(state)
     }
 
-    is_mutation(state, action, reward){
-        return this.reward_model.is_mutation(state, action, reward)
+    p_value(state, action, reward){
+        return this.reward_model.p_value(state, action, reward)
     }
 
 }
@@ -1136,29 +1192,24 @@ class Agent{
         // group & sharing option
         this.group = null        
         this.q_sharing = false
-        this.e_sharing = false
-        this.b_sharing = false
 
         this.tau_value_table_sharing = false
         
         this.policy_sharing = false
         this.reward_policy_sharing = false
-        
     
         this.memory_sharing = false
 
         // policy 
         this.qw = 1
-        this.ew = 1
-        this.bw = 1
-        this.tw = 0.0001
+        this.tw = 0.000000
 
         // reward
         this.default_reward = -0.01
         this.curiosity_reward = 0.001
         this.repeat_penalty = -0.01
 
-        this.epsilon = 0.01
+        this.epsilon = 0.00
 
         // basic element
         this.states = states
@@ -1174,40 +1225,20 @@ class Agent{
         // this.policy = new SoftMaxPolicy(this, this.epsilon, this.qw, this.ew, this.bw, this.tw)
         
         var q_value_manager_args = {
-            default_value : 0,
-            value_update_ratio : 0.3,
+            q_value_mean : 0,
+            q_value_variance : 1,
+            q_value_update_ratio : 0.3,
+
             discounting_factor : 0.99,
-            mean : 0,
-            variance : 0,
-            model_update_ratio : 0.5,
+            reward_mean : 0,
+            reward_variance : 0,
+            reward_update_ratio : 0.5,
             planning_num : 100,
         }
+
+
         this._q_manager = new RewardManager(states, actions, q_value_manager_args)
-        var e_value_manager_args = {
-            default_value : 0,
-            value_update_ratio : 0.9,
-            discounting_factor : 0.9,
-            mean : 0,
-            variance : 0,
-            model_update_ratio : 0.9,
-            planning_num : 100,
-        }
-        this._e_manager = new RewardManager(states, actions, e_value_manager_args)
-
-        var b_value_manager_args = {
-            default_value : 0,
-            value_update_ratio : 0.5,
-            discounting_factor : 0.99,
-            mean : 0,
-            variance : 0,
-            model_update_ratio : 0.1,
-            planning_num : 100,
-        }
-        this._b_manager = new RewardManager(states, actions, b_value_manager_args)
-
-        this.q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
-        this.e_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
-        this.b_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
+        this._q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
 
         this.tau_value_table = new ActionTauTable(states, actions)
 
@@ -1266,53 +1297,16 @@ class Agent{
     }
 
     step(reward, state, finished){
-        if(finished == true){
-            console.log("finished")
-        }
-
         reward += this.default_reward
-        var count = this.memory.state_action_count_table[this.past_state][this.past_action]
-        
-        if(3 < count){
-            var e_reward = this.q_manager.is_mutation(this.past_state, this.past_action, reward)
-            console.log("e_reward", e_reward)
-            e_reward = Math.max(0, e_reward-0.1)
-            if(e_reward < 0.01){
-                e_reward = 0
-            }else{
-                this.q_manager.reset(this.past_state, this.past_action)
-                this.e_manager.reset(this.past_state, this.past_action)
-                this.b_manager.reset(this.past_state, this.past_action)
-                console.log("삭제")
-            }
-            this.e_manager.update(this.past_state, this.past_action, e_reward, state, finished)
+        var changed_unstable = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
+        if(changed_unstable == true){
+            this.q_manager.reset(this.past_state, this.past_action, state)
         }
-        
 
+        this.memory.count_state_action_and_check_first(this.past_state, this.past_action)
 
-        this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
-
-        var boring_reward = 0
-        if(this.memory.count_state_action_and_check_first(this.past_state, this.past_action)){
-            // boring_reward += this.curiosity_reward*(1 + this.memory.get_state_action_num(this.past_state, this.past_action)**(1/100))
-            boring_reward += this.curiosity_reward
-        }
-        if(this.memory.count_state_and_check_first(state)){
-               
-        }   
-
-
-        this.memory.count_state_action_and_check_first(state, action)
-        boring_reward += this.repeat_penalty*(this.memory.get_state_action_num(this.past_state, this.past_action))**(1/2)
-
-        
-        this.b_manager.update(this.past_state, this.past_action, boring_reward, state, finished)
-
-        // planning
         this.q_manager.planning()
-        this.e_manager.planning()
-        this.b_manager.planning()
-        
+
         // select action
         var action = this.get_policy().choose_action(state)
         
@@ -1525,7 +1519,7 @@ class Operator{
         this.map_size = map_size
         this.env = new FrozenLake(map_size, frozen_ratio)
         this.informationViewer = new InformationViewer();
-
+        this.speed = 1000
         this.cellInforView = new CellInforView()
         // agentGroup
         this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
@@ -1573,6 +1567,10 @@ class Operator{
         this.body.appendChild(this.env_view.getElement())
         this.body.appendChild(this.informationViewer.getElement())
         this.body.appendChild(this.cellInforView.getElement())
+
+        this.speedSlider = new Slider("Speed", 1)
+        this.speedSlider.OnInputCallback.add((value) => this.speed = ((1-value**(1/4)))*1000)
+        this.body.appendChild(this.speedSlider.getElement()) 
     }
 
     update_cell_view(state){
@@ -1580,13 +1578,7 @@ class Operator{
         this.cellInforView.q_mean = this.agents[0].q_manager.get_reward_means_for_state(state)
         this.cellInforView.q_std = this.agents[0].q_manager.get_reward_standard_deviations_for_state(state)
 
-        this.cellInforView.e_value = this.agents[0].e_manager.get_values_for_state(state)
-        this.cellInforView.e_mean = this.agents[0].e_manager.get_reward_means_for_state(state)
-        this.cellInforView.e_std = this.agents[0].e_manager.get_reward_standard_deviations_for_state(state)
 
-        this.cellInforView.b_value = this.agents[0].b_manager.get_values_for_state(state)
-        this.cellInforView.b_mean = this.agents[0].b_manager.get_reward_means_for_state(state)
-        this.cellInforView.b_std = this.agents[0].b_manager.get_reward_standard_deviations_for_state(state)
 
         this.cellInforView.tau = this.agents[0].tau_value_table.get_taus_for_state(state)
     }
@@ -1637,29 +1629,15 @@ class Operator{
         
     }
 
-    async one_episode(agent_idx, freq){
-        await setTimeout(() => {
-            let end = this.one_step(agent_idx)
-            if(end == false){
-                this.one_episode(agent_idx, freq)
-            }
-        }, freq);
-    }
-    
-    async one_episode2(agent_idx, freq){
-        operator.initAgent(agent_idx)
+    async one_episode(agent_idx){
+        this.initAgent(agent_idx)
+        
         while(true){
-            let end = this.one_step(agent_idx)
-            await wait(freq)
-            if(end == true){
-                return
+            var end = this.one_step(agent_idx)
+            if(end){
+                break;
             }
-        }
-    }
-
-    async n_episode(agent_idx, freq, n){
-        for(var i=0 ; i<n ; i++){
-            await this.one_episode2(agent_idx, freq)
+            await wait(this.speed)
         }
     }
     
@@ -1672,16 +1650,21 @@ class Operator{
         this.env_view.showAgent(0, 0, agent_idx, true)
     }
 
-    async all_agent_step(freq){
+    async all_agent_one_step(){
+        for(var i=0 ; i<this.agent_num ; i++){
+            await this.one_step(i)
+            this.update_cell_view(this.selected_cell)
+            await wait(this.speed)
+        }
+    }
+    async all_agent_one_episode(){
         while(true){
-            // for(var i=0 ; i<this.agent_num ; i++){
-            for(var i=0 ; i<this.agent_num ; i++){
-                await this.one_step(i)
-                this.update_cell_view(this.selected_cell)
-                await wait(freq)
-                // break
-            }
-            
+            await this.all_agent_one_step()
+        }
+    }
+    async all_agent_infinite_step(){
+        while(true){
+            await this.all_agent_one_step()
         }
     }
     async do(){
@@ -1729,8 +1712,7 @@ class Operator{
 class Slider{
     constructor(name="name", value = 0){
         [this.element, this._name, this._value, this.slider] = this.createElement()
-        this.OnInputCallback = new Callback_1()
-        this.OnInputCallback.add((a) => console.log(a.value)) 
+        this.OnInputCallback = new Callback_1() 
         this.name = name
         this.value = value
     }
@@ -1749,7 +1731,7 @@ class Slider{
         var slider = element.getElementsByTagName("input")[0]
         
         slider.oninput = () => {value.innerHTML=slider.value}
-        slider.onchange = (value) => this.OnInputCallback.invoke(value)
+        slider.onchange = () => this.OnInputCallback.invoke(this.value)
         return [element, name, value, slider]
     }
     get name(){
@@ -1862,16 +1844,20 @@ document.getElementById("initialize_button").addEventListener('click',() => {
         operator.env_view.element.remove()
         operator.informationViewer.element.remove()
     }
-    operator = new Operator(5, 1, 0.9)
+    operator = new Operator(10, 1, 0.9)
 })
 
 
 document.getElementById("continue_button").addEventListener('click',() => {
-    operator.all_agent_step(0.0001)
+    operator.all_agent_infinite_step()
+})
+
+document.getElementById("one_step_button").addEventListener('click',() => {
+    operator.all_agent_one_step()
 })
 
 document.getElementById("one_episode_button").addEventListener('click',() => {operator.initAgent(0)
-    operator.one_episode(1000)});
+    operator.all_agent_one_episode()});
 
 
 class CellInforView{
@@ -1881,14 +1867,6 @@ class CellInforView{
         this._q_value = [0, 0, 0, 0]
         this._q_mean = [0, 0, 0, 0]
         this._q_std = [0, 0, 0, 0]
-
-        this._e_value = [0, 0, 0, 0]
-        this._e_mean = [0, 0, 0, 0]
-        this._e_std = [0, 0, 0, 0]
-
-        this._b_value = [0, 0, 0, 0]
-        this._b_mean = [0, 0, 0, 0]
-        this._b_std = [0, 0, 0, 0]
 
         this._tau = [0, 0, 0, 0]
 
@@ -1921,40 +1899,7 @@ class CellInforView{
         this.update()
     }
     
-    get e_value(){return this._e_value}
-    set e_value(value){
-        this._e_value = value
-        this.update()
-    }
-
-    get e_mean(){return this._e_mean}
-    set e_mean(value){
-        this._e_mean = value
-        this.update()
-    }
-
-    get e_std(){return this._e_std}
-    set e_std(value){
-        this._e_std = value
-        this.update()
-    }
-    get b_value(){return this._b_value}
-    set b_value(value){
-        this._b_value = value
-        this.update()
-    }
-
-    get b_mean(){return this._b_mean}
-    set b_mean(value){
-        this._b_mean = value
-        this.update()
-    }
-
-    get b_std(){return this._b_std}
-    set b_std(value){
-        this._b_std = value
-        this.update()
-    }
+    
     get tau(){return this._tau}
     set tau(value){
         this._tau = value
@@ -1971,14 +1916,6 @@ class CellInforView{
                 <div>Q_value: ${Math.floor(this.q_value[i]*100)/100}</div>
                 <div>Q_mean: ${Math.floor(this.q_mean[i]*100)/100}</div>
                 <div>Q_std: ${Math.floor(this.q_std[i]*100)/100}</div>
-
-                <div>E_value: ${Math.floor(this.e_value[i]*100)/100}</div>
-                <div>E_mean: ${Math.floor(this.e_mean[i]*100)/100}</div>
-                <div>E_std: ${Math.floor(this.e_std[i]*100)/100}</div>
-
-                <div>B_value: ${Math.floor(this.b_value[i]*100)/100}</div>
-                <div>B_mean: ${Math.floor(this.b_mean[i]*100)/100}</div>
-                <div>B_std: ${Math.floor(this.b_std[i]*100)/100}</div>
 
                 <div>Tau: ${this.tau[i]}</div>
             </div>
