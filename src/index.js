@@ -1,4 +1,4 @@
-// import {FrozenLakeEnvViewer, CellAgentViewer, GridCellViewer} from "./MLView.js"
+// import {FrozenLakeEnvViewerObject, CellAgentViewer, GridCellViewer} from "./MLView.js"
 // import {FrozenLake, Agent} from "./ML.js"
 
 // import { random } from "numjs";
@@ -503,7 +503,7 @@ class GridCellViewer{
 }
 
 
-class FrozenLakeEnvViewer{
+class GridEnvironmentView{
     constructor(width, height, cellSize){
         this.selected_cell = null
         this.width = width;
@@ -831,18 +831,17 @@ class ActionValueModel{
         
         this.states = states
         this.actions = actions
+        this.state_num = states.length
+        this.action_num = actions.length
         this.mean = mean
         this._step_size = step_size
         
         this.variance = variance
         this.gamma = gamma
-        this.value_table = util.ndarray([states.length, actions.length], 0)
-        for(var state=0 ; state<states.length ; state++){
-            for(var action=0 ; action<actions.length ; action++){
-                this.value_table[state][action] = this.create_gausian_model()
-            }
-        }
+        this.value_table = this.create_value_table()
     }
+
+
     set step_size(value){
         this._step_size = value
         for(var state=0 ; state<this.states.length ; state++){
@@ -854,8 +853,23 @@ class ActionValueModel{
             }
         }
     }
+
+    create_value_table(){
+        var value_table =  util.ndarray([this.state_num, this.action_num], 0)
+        for(var state=0 ; state<this.state_num ; state++){
+            for(var action=0 ; action<this.action_num ; action++){
+                value_table[state][action] = this.create_gausian_model()
+            }
+        }
+        return value_table
+    }
+
     get step_size(){
         return this._step_size
+    }
+
+    reset_all(){
+        this.value_table = this.create_value_table()
     }
 
     create_gausian_model(){
@@ -904,7 +918,6 @@ class ActionRewardModel{
     constructor(states, actions, mean, variance, step_size, no_variance = false){
         this.max_size = 10000
         this.samples = []
-        this.reward_model_table = util.ndarray([states.length, actions.length], 0)
         
         this.mean = mean
         this.variance = variance
@@ -913,17 +926,32 @@ class ActionRewardModel{
         
         this.states = states
         this.actions = actions
+        this.state_num = states.length
+        this.action_num = actions.length
 
-        for(var state=0 ; state<states.length ; state++){
-            for(var action=0 ; action<actions.length ; action++){
-                this.reward_model_table[state][action] = new GausianModel(mean, variance, step_size, true)
-            }
-        }
+        this.reward_model_table = this.create_reward_model_table()
     }
 
+    reset_all(){
+        this.reward_model_table = this.create_reward_model_table()
+        this.samples = []
+    }
+    create_reward_model_table(){
+        var reward_model_table = util.ndarray([this.state_num, this.action_num], 0)
+        for(var state=0 ; state<this.state_num ; state++){
+            for(var action=0 ; action<this.action_num ; action++){
+                reward_model_table[state][action] = this.create_gausian_model()
+            }
+        }
+        return reward_model_table
+    }
+
+    create_gausian_model(){
+        return new GausianModel(this.mean, this.variance, this.step_size, true)
+    }
     reset(state, action, next_state){
         for(var a=0 ; a<this.actions.length ; a++){
-            this.reward_model_table[state][a] = new GausianModel(this.mean, this.variance, this.step_size, true)
+            this.reward_model_table[state][a] = this.create_gausian_model()
         }
 
         // for(var action=0 ; action<actions.length ; action++){
@@ -1064,7 +1092,18 @@ class ValueManager{
 
         console.log(this.planning_num)
     }
+    reset_all(){
+        this.reset_all_value()    
+        this.reset_all_model()
+    }
 
+    reset_all_value(){
+        this.value_table.reset_all()
+    }
+
+    reset_all_model(){
+        this.reward_model.reset_all()
+    }
 
     update(state, action, reward, next_state){
         var p_value = this.value_table.update(state, action, reward, next_state)
@@ -1299,6 +1338,18 @@ class Agent{
         return this.q_manager.step_size
     }
 
+    reset_all(){
+        this.reset_all_value()    
+        this.reset_all_model()
+    }
+
+    reset_all_value(){
+        this.q_manager.reset_all_value()
+    }
+
+    reset_all_model(){
+        this.q_manager.reset_all_model()
+    }
 
     set_group(group){
         this.group = group
@@ -1548,38 +1599,73 @@ class FrozenLake{
         return state_reward[state]
     }
 
+    new_map(){
+        this.map = this.generateRandomMap(this.map_size, this.frozen_ratio)
+    }
 }
 
 
 
-class Operator{
+class ReinforcementLearningDemo{
     constructor(map_size, agent_num, frozen_ratio){
+        this.element = document.createElement("div");
+        this.element.innerHTML = `
+        <div class="buttons"></div>
+        <hbox>
+            <div class="env_view"></div>
+            <div>
+                <div class="sliders"></div>
+                <div class="information_view"></div>
+            </div>        
+        </hbox>
 
+        `
         
         this.selected_cell = 0
         this.selected_agent_idx = 0
         this.agent_num = agent_num
-        this.body = document.body;
         this.map_size = map_size
-        this.env = new FrozenLake(map_size, frozen_ratio)
-        this.informationViewer = new InformationViewer();
+        
         this.speed = 100
-        this.cellInforView = new CellInforView()
+
+        this.buttonListDom = new ButtonListObect(["New Map", "Reset Value", "Reset Model", "One Step", "One Episode", "Continue"])
+        this.element.getElementsByClassName("buttons")[0].appendChild(this.buttonListDom.getElement())
+
+        this.grid_env_view = new GridEnvironmentView(map_size, map_size, 50);
+        this.element.getElementsByClassName("env_view")[0].appendChild(this.grid_env_view.getElement())
+
+        this.sliderListDom = new SliderListObject(["Speed", "Epsilon", "Kappa", "Gamma", "Step Size"])
+        this.element.getElementsByClassName("sliders")[0].appendChild(this.sliderListDom.getElement())
+        
+        this.informationViewer = new InformationViewer();
+        this.element.getElementsByClassName("information_view")[0].appendChild(this.informationViewer.getElement())
+        
+        this.cell_infor_view = new CellInforViewerObject()
+        this.element.appendChild(this.cell_infor_view.getElement())
+
+
+
+
+
+
+
+        this.env = new FrozenLake(map_size, frozen_ratio)
         // agentGroup
         this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
+
+
         this.agentGroup.goal_callback.add(() => this.informationViewer.goal += 1)
         this.agentGroup.hall_callback.add(() => this.informationViewer.hall += 1)
         this.agentGroup.after_step_callback.add(() => this.informationViewer.step += 1)
-        this.agentGroup.first_state.add((state) => {this.informationViewer.state += 1
-        })
+        this.agentGroup.first_state.add((state) => {this.informationViewer.state += 1})
         this.agentGroup.first_state_action.add((state, action) => this.informationViewer.state_action += 1)
         this.agentGroup.after_action_value_update_callback.add((state, action) => {
             var x, y
             [x, y] = this.env.state_to_coordinate(state)
             var state_value = this.agentGroup.agents[0].get_policy().getStateValue(state)
             var action_value = this.agentGroup.agents[0].get_policy().getValueForState(state)
-            this.env_view.setValue(x, y,  Math.floor(state_value*100)/100)
-            this.env_view.setArrows(x, y, action_value)
+            this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
+            this.grid_env_view.setArrows(x, y, action_value)
         })
 
         this.agents = []
@@ -1589,75 +1675,74 @@ class Operator{
             this.agentGroup.addAgent(agent)
         }     
         
-        this.speedSlider = new Slider("Speed", 0.5)
-        this.body.appendChild(this.speedSlider.getElement())
-        this.speedSlider.OnInputCallback.add((value) => this.speed = (1000**(1-value)))
-         
 
-        this.epsilonSlider = new Slider("Epsilon", 0.5)
-        this.body.appendChild(this.epsilonSlider.getElement())
-        this.epsilonSlider.OnInputCallback.add((value) => {
-            this.get_selected_agent().epsilon = value
+        this.buttonListDom.objects["New Map"].OnClickCallback.add(() => {
+            this.new_map()
+            this.grid_env_view.setStateMap(this.env.getMap())
         })
+        this.buttonListDom.objects["Reset Value"].OnClickCallback.add(() => {this.get_selected_agent().reset_all_value()})
+        this.buttonListDom.objects["Reset Model"].OnClickCallback.add(() => {this.get_selected_agent().reset_all_model()})
+        this.buttonListDom.objects["One Step"].OnClickCallback.add(() => {this.all_agent_one_step()})
+        this.buttonListDom.objects["One Episode"].OnClickCallback.add(() => {this.all_agent_one_episode()})
+        this.buttonListDom.objects["Continue"].OnClickCallback.add(() => {this.all_agent_infinite_step()})
         
-        this.kappaSlider = new Slider("Kappa(x0.1)", 0.5)
-        this.body.appendChild(this.kappaSlider.getElement())
-        this.kappaSlider.OnInputCallback.add((value) => {
-            this.get_selected_agent().kappa = value*0.1
-        })
         
-        this.gammaSlider = new Slider("Gamma", 0.5)
-        this.body.appendChild(this.gammaSlider.getElement())
-        this.gammaSlider.OnInputCallback.add((value) => {
-            this.get_selected_agent().gamma = value
-        })
+
+        this.sliderListDom.objects["Speed"].OnInputCallback.add((value) => this.speed = (1000**(1-value)))
+        this.sliderListDom.objects["Epsilon"].OnInputCallback.add((value) => this.get_selected_agent().epsilon = value)
+        this.sliderListDom.objects["Kappa"].OnInputCallback.add((value) => this.get_selected_agent().kappa = value*0.001)
+        this.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
+        this.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
+
+
+
         
-        this.stepSizeSlider = new Slider("Step Size", 0.5)
-        this.body.appendChild(this.stepSizeSlider.getElement())
-        this.stepSizeSlider.OnInputCallback.add((value) => {
-            this.get_selected_agent().step_size = value
-        })
-
-
-
-        this.env_view = new FrozenLakeEnvViewer(map_size, map_size, 50);
-        this.env_view.ctrl_click_callback.add((x, y) => {
+        this.grid_env_view.ctrl_click_callback.add((x, y) => {
             
             var state = this.env.coordinate_to_state(x, y)
             var type = this.env.get_type(state)
             type = (type == "H")? "F" : "H"
             var success = this.env.modify(state, type)
             if(success){
-                // this.env_view.setStateMap(this.env.getMap())
-                // this.env_view.setRewardMap(this.env.getRewardMap())
-                this.env_view.setState(x, y, this.env.getMap()[y][x])
-                this.env_view.setReward(x, y, this.env.getRewardMap()[y][x])
-                // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
+                this.grid_env_view.setState(x, y, this.env.getMap()[y][x])
+                this.grid_env_view.setReward(x, y, this.env.getRewardMap()[y][x])
             }
             // this.env_view.setArrowsMap(this.agentGroup)/
         })
-        this.env_view.click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
-        this.env_view.setStateMap(this.env.getMap())
+        this.grid_env_view.click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
+        this.grid_env_view.setStateMap(this.env.getMap())
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
-        this.env_view.setRewardMap(this.env.getRewardMap())
-        this.body.appendChild(this.env_view.getElement())
-        this.body.appendChild(this.informationViewer.getElement())
-        this.body.appendChild(this.cellInforView.getElement())
+        this.grid_env_view.setRewardMap(this.env.getRewardMap())
+
+        
 
 
     }
+    createElement(){
+
+    }
+    
+    new_map(){
+        this.env.new_map()
+    }
+
+    getElement(){
+        return this.element
+    }
+
     get_selected_agent(){
         return this.agents[this.selected_agent_idx]
     }
 
+
     update_cell_view(state){
-        this.cellInforView.q_value = this.agents[0].q_manager.get_values_for_state(state)
-        this.cellInforView.q_mean = this.agents[0].q_manager.get_reward_means_for_state(state)
-        this.cellInforView.q_std = this.agents[0].q_manager.get_reward_standard_deviations_for_state(state)
+        this.cell_infor_view.q_value = this.agents[0].q_manager.get_values_for_state(state)
+        this.cell_infor_view.q_mean = this.agents[0].q_manager.get_reward_means_for_state(state)
+        this.cell_infor_view.q_std = this.agents[0].q_manager.get_reward_standard_deviations_for_state(state)
 
 
 
-        this.cellInforView.tau = this.agents[0].tau_value_table.get_taus_for_state(state)
+        this.cell_infor_view.tau = this.agents[0].tau_value_table.get_taus_for_state(state)
     }
 
     one_step(agent_idx){
@@ -1667,11 +1752,11 @@ class Operator{
             this.initAgent(agent_idx)
             let x, y
             [x, y] = this.env.state_to_coordinate(agent.past_state)
-            this.env_view.showAgent(x, y, agent_idx, true)
+            this.grid_env_view.showAgent(x, y, agent_idx, true)
         }else{
             let x, y
             [x, y] = this.env.state_to_coordinate(agent.past_state)
-            this.env_view.showAgent(x, y, agent_idx, false)
+            this.grid_env_view.showAgent(x, y, agent_idx, false)
             
         
             // agent 액션 수행
@@ -1681,15 +1766,9 @@ class Operator{
             // agent 그리기
             let nx, ny
             [nx, ny] = this.env.state_to_coordinate(state)
-            this.env_view.showAgent(nx, ny, agent_idx, true)
+            this.grid_env_view.showAgent(nx, ny, agent_idx, true)
             
-            // var valueMap = agent.getQValueMap()
-            // for(var i=0 ; i<valueMap.length ; i++){
-            //     let x, y
-            //     [x, y] = this.env.state_to_coordinate(i)
-            //     this.env_view.setValue(x, y, valueMap[i])
-            // }
-            // 끝난 경우
+
             if (done == true){
                 if(state == this.map_size**2-1){
                     this.informationViewer.goal += 1
@@ -1721,10 +1800,10 @@ class Operator{
     initAgent(agent_idx){
         let x, y
         [x, y] = this.env.state_to_coordinate(this.agents[agent_idx].past_state)
-        this.env_view.showAgent(x, y, agent_idx, false)
+        this.grid_env_view.showAgent(x, y, agent_idx, false)
 
         this.agents[agent_idx].start(0)
-        this.env_view.showAgent(0, 0, agent_idx, true)
+        this.grid_env_view.showAgent(0, 0, agent_idx, true)
     }
 
     async all_agent_one_step(){
@@ -1755,38 +1834,62 @@ class Operator{
         }
 
     }
+
 }
 
-// async function test(){
-//     console.log("hello")
-//     await wait(1000)
-//     console.log("hello2")
-// }
-// test()
-// wait(1000).then(() => console.log("hello2"))
+class ButtonListObect{
+    constructor(names){
+        this.element = this.createElement()
+        this.objects = {}
+        for(var name of names){
+            this.objects[name] =  new ButtonObject(name)
+            this.element.appendChild(this.objects[name].getElement())   
+        }
+    }
+    createElement(){
+        return document.createElement("div");
+    }
+    getElement(){
+        return this.element
+    }
+}
 
+class ButtonObject{
+    constructor(name){
+        this.element = this.createElement()
+        this.element.innerHTML = name
 
+        this.OnClickCallback = new Callback_0()
+        this.element.onclick = () => {this.OnClickCallback.invoke()}
+    }
+    getElement(){
+        return this.element
+    }
+    createElement(){
+        var element = document.createElement("button");
+        element.className="btn btn-outline-dark"
+        return element
+    }
+}
 
+class SliderListObject{
+    constructor(names){
+        this.element = this.createElement()
+        this.objects = {}
+        for(var name of names){
+            this.objects[name] =  new SliderObject(name)
+            this.element.appendChild(this.objects[name].getElement())   
+        }
+    }
 
-// async function test(){
-//     operator.initAgent(0)
-//     await operator.one_episode2(1)
-//     operator.initAgent(0)
-//     await operator.one_episode2(1)
-// }
-// await test()
-
-
-// while(true){
-//     operator.initAgent(0)
-//     await operator.one_episode2(1)
-// }
-
-// while(true){
-//     operator.initAgent(0)
-//     await operator.one_episode(1)
-// }
-class Slider{
+    createElement(){
+        return document.createElement("div");
+    }
+    getElement(){
+        return this.element
+    }
+}
+class SliderObject{
     constructor(name="name", value = 0){
         [this.element, this._name, this._value, this.slider] = this.createElement()
         this.OnInputCallback = new Callback_1() 
@@ -1826,28 +1929,7 @@ class Slider{
         this._value.innerHTML = v
     }
 }
-// slider = new Slider()
-// document.body.appendChild(slider.getElement())
 
-// class ControlView{
-//     constructor(){
-//         this.element = this.createElement()
-//         this.element
-//     }
-
-//     getElement(){
-//         return this.element
-//     }
-//     createElement(){
-        
-//         var element = document.createElement("div");
-//         element.className = "controlView"
-//         this.element.innerHTML = `
-            
-        
-//     `
-//     }
-// }
 
 class InformationViewer{
     constructor(){
@@ -1914,31 +1996,7 @@ class InformationViewer{
         return element}
 }
 
-
-
-var operator
-document.getElementById("initialize_button").addEventListener('click',() => {
-    if(operator != null){
-        operator.env_view.element.remove()
-        operator.informationViewer.element.remove()
-    }
-    operator = new Operator(10, 1, 0.9)
-})
-
-
-document.getElementById("continue_button").addEventListener('click',() => {
-    operator.all_agent_infinite_step()
-})
-
-document.getElementById("one_step_button").addEventListener('click',() => {
-    operator.all_agent_one_step()
-})
-
-document.getElementById("one_episode_button").addEventListener('click',() => {operator.initAgent(0)
-    operator.all_agent_one_episode()});
-
-
-class CellInforView{
+class CellInforViewerObject{
     constructor(){
         this.element = this.createElement()
 
@@ -2002,3 +2060,7 @@ class CellInforView{
         
     }
 }
+
+operator = new ReinforcementLearningDemo(10, 1, 0.7)
+document.body.appendChild(operator.getElement())
+
