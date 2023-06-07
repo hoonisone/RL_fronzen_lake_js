@@ -719,8 +719,9 @@ class GausianModel{
     }
 
     update_stable(value){
+        return false
         var p_value = this.p_value(value)
-        this.mean_p_value += 0.1*(p_value - this.mean_p_value)
+        this.mean_p_value += 0.3*(p_value - this.mean_p_value)
         // console.log("mean_p_value", this.mean_p_value)
         // console.log("stable", this.stable)
         // console.log("value", value)
@@ -1620,7 +1621,6 @@ class ReinforcementLearningDemo{
         </hbox>
 
         `
-        
         this.selected_cell = 0
         this.selected_agent_idx = 0
         this.agent_num = agent_num
@@ -1643,16 +1643,10 @@ class ReinforcementLearningDemo{
         this.cell_infor_view = new CellInforViewerObject()
         this.element.appendChild(this.cell_infor_view.getElement())
 
-
-
-
-
-
-
         this.env = new FrozenLake(map_size, frozen_ratio)
+
         // agentGroup
         this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
-
 
         this.agentGroup.goal_callback.add(() => this.informationViewer.goal += 1)
         this.agentGroup.hall_callback.add(() => this.informationViewer.hall += 1)
@@ -1660,12 +1654,7 @@ class ReinforcementLearningDemo{
         this.agentGroup.first_state.add((state) => {this.informationViewer.state += 1})
         this.agentGroup.first_state_action.add((state, action) => this.informationViewer.state_action += 1)
         this.agentGroup.after_action_value_update_callback.add((state, action) => {
-            var x, y
-            [x, y] = this.env.state_to_coordinate(state)
-            var state_value = this.agentGroup.agents[0].get_policy().getStateValue(state)
-            var action_value = this.agentGroup.agents[0].get_policy().getValueForState(state)
-            this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
-            this.grid_env_view.setArrows(x, y, action_value)
+            this.update_grid_env_view_cell_value(state)
         })
 
         this.agents = []
@@ -1677,25 +1666,23 @@ class ReinforcementLearningDemo{
         
 
         this.buttonListDom.objects["New Map"].OnClickCallback.add(() => {
-            this.new_map()
+            this.env.new_map()
             this.grid_env_view.setStateMap(this.env.getMap())
         })
-        this.buttonListDom.objects["Reset Value"].OnClickCallback.add(() => {this.get_selected_agent().reset_all_value()})
+        this.buttonListDom.objects["Reset Value"].OnClickCallback.add(() => {
+            this.get_selected_agent().reset_all_value()
+            this.update_grid_env_view_call_value_all()
+        })
         this.buttonListDom.objects["Reset Model"].OnClickCallback.add(() => {this.get_selected_agent().reset_all_model()})
         this.buttonListDom.objects["One Step"].OnClickCallback.add(() => {this.all_agent_one_step()})
         this.buttonListDom.objects["One Episode"].OnClickCallback.add(() => {this.all_agent_one_episode()})
         this.buttonListDom.objects["Continue"].OnClickCallback.add(() => {this.all_agent_infinite_step()})
-        
-        
 
         this.sliderListDom.objects["Speed"].OnInputCallback.add((value) => this.speed = (1000**(1-value)))
         this.sliderListDom.objects["Epsilon"].OnInputCallback.add((value) => this.get_selected_agent().epsilon = value)
         this.sliderListDom.objects["Kappa"].OnInputCallback.add((value) => this.get_selected_agent().kappa = value*0.001)
         this.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
         this.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
-
-
-
         
         this.grid_env_view.ctrl_click_callback.add((x, y) => {
             
@@ -1714,16 +1701,20 @@ class ReinforcementLearningDemo{
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
         this.grid_env_view.setRewardMap(this.env.getRewardMap())
 
-        
-
-
-    }
-    createElement(){
-
     }
     
-    new_map(){
-        this.env.new_map()
+    update_grid_env_view_cell_value(state){
+        var x, y
+        [x, y] = this.env.state_to_coordinate(state)
+        var state_value = this.agentGroup.agents[0].get_policy().getStateValue(state)
+        var action_value = this.agentGroup.agents[0].get_policy().getValueForState(state)
+        this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
+        this.grid_env_view.setArrows(x, y, action_value)
+    }
+    update_grid_env_view_call_value_all(){
+        for(var state of this.env.state_list){
+            this.update_grid_env_view_cell_value(state)
+        }
     }
 
     getElement(){
@@ -1739,9 +1730,6 @@ class ReinforcementLearningDemo{
         this.cell_infor_view.q_value = this.agents[0].q_manager.get_values_for_state(state)
         this.cell_infor_view.q_mean = this.agents[0].q_manager.get_reward_means_for_state(state)
         this.cell_infor_view.q_std = this.agents[0].q_manager.get_reward_standard_deviations_for_state(state)
-
-
-
         this.cell_infor_view.tau = this.agents[0].tau_value_table.get_taus_for_state(state)
     }
 
