@@ -308,7 +308,7 @@ class GridCellViewer{
 
         this.click_callback = new Callback_2()
         this.ctrl_click_callback = new Callback_2()
-
+        this.onDoubleClickCallback = new Callback_2()
         
         this.element.addEventListener("click", (e) => {
             if(e.ctrlKey){
@@ -317,6 +317,7 @@ class GridCellViewer{
                 this.click_callback.invoke(this.x, this.y)
             }
         })
+        this.element.ondblclick = () => this.onDoubleClickCallback.invoke(this.x, this.y)
             
         this.setArrow("up", 0.5)
         this.setArrow("down", 0.5)
@@ -515,6 +516,7 @@ class GridEnvironmentView{
 
         this.click_callback = new Callback_2()
         this.ctrl_click_callback = new Callback_2()
+        this.onDoubleClickCallback = new Callback_2()
 
         this.click_callback.add((x, y) => this.select(x, y))
     }
@@ -544,7 +546,8 @@ class GridEnvironmentView{
             for (var x=0 ; x<width ; x++){
                 var gridCell = new GridCellViewer(x, y)
                 gridCell.click_callback.add((x, y) => this.click_callback.invoke(x, y))
-                gridCell.ctrl_click_callback.add((x, y) => this.ctrl_click_callback.invoke(x, y))       
+                gridCell.ctrl_click_callback.add((x, y) => this.ctrl_click_callback.invoke(x, y))   
+                gridCell.onDoubleClickCallback.add((x, y) => this.onDoubleClickCallback.invoke(x, y))
                 element.appendChild(gridCell.getElement())     
                 map[y][x] = gridCell;
             }    
@@ -707,7 +710,7 @@ class GausianModel{
     }   
 
     update(value){
-        var changed_unstable = this.update_stable(value)
+        var distribution_changed = this.update_stable(value)
         
         this.n += 1
         var step_size = Math.max((1/this.n), this.step_size)
@@ -715,7 +718,7 @@ class GausianModel{
         this.variance += step_size*((value - this.mean)**2 - this.variance)
         this.variance = Math.max(this.variance, GausianModel.MIN_VARIANCE)
 
-        return changed_unstable
+        return distribution_changed
     }
 
     update_stable(value){
@@ -889,8 +892,8 @@ class ActionValueModel{
         var next_return = (finished == true) ? 0 : this.gamma*Math.max(...this.get_values_for_state(next_state))
         var cur_return = reward + next_return
 
-        var changed_unstable = this.value_table[state][action].update(cur_return)
-        return changed_unstable
+        var distribution_changed = this.value_table[state][action].update(cur_return)
+        return distribution_changed
     }
     getValueMap(){
         let valueMap = []
@@ -1107,10 +1110,10 @@ class ValueManager{
     }
 
     update(state, action, reward, next_state){
-        var p_value = this.value_table.update(state, action, reward, next_state)
+        var distribution_changed = this.value_table.update(state, action, reward, next_state)
         this.reward_model.update(state, action, reward, next_state)
         this.after_action_value_update_callback.invoke(state, action)
-        return p_value
+        return distribution_changed
     }
 
     planning(){
@@ -1274,6 +1277,10 @@ class Agent{
         
         this.finished = true
 
+        this.use_oblivion = false
+
+
+
         this._memory = new Memory(states, actions)
 
         // Policy
@@ -1391,8 +1398,8 @@ class Agent{
 
     step(reward, state, finished){
         reward += this.default_reward
-        var changed_unstable = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
-        if(changed_unstable == true){
+        var distribution_changed = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
+        if(this.use_oblivion && distribution_changed == true){
             this.q_manager.reset(this.past_state, this.past_action, state)
         }
 
@@ -1616,6 +1623,7 @@ class ReinforcementLearningDemo{
             <div class="env_view"></div>
             <div>
                 <div class="sliders"></div>
+                <div class="check_box_list"></div>
                 <div class="information_view"></div>
             </div>        
         </hbox>
@@ -1630,6 +1638,9 @@ class ReinforcementLearningDemo{
 
         this.buttonListDom = new ButtonListObect(["New Map", "Reset Value", "Reset Model", "One Step", "One Episode", "Continue"])
         this.element.getElementsByClassName("buttons")[0].appendChild(this.buttonListDom.getElement())
+
+        this.checkBoxListDom = new CheckBoxList(["Oblivion", "Test"])
+        this.element.getElementsByClassName("check_box_list")[0].appendChild(this.checkBoxListDom.getElement())
 
         this.grid_env_view = new GridEnvironmentView(map_size, map_size, 50);
         this.element.getElementsByClassName("env_view")[0].appendChild(this.grid_env_view.getElement())
@@ -1673,6 +1684,8 @@ class ReinforcementLearningDemo{
             this.get_selected_agent().reset_all_value()
             this.update_grid_env_view_call_value_all()
         })
+
+
         this.buttonListDom.objects["Reset Model"].OnClickCallback.add(() => {this.get_selected_agent().reset_all_model()})
         this.buttonListDom.objects["One Step"].OnClickCallback.add(() => {this.all_agent_one_step()})
         this.buttonListDom.objects["One Episode"].OnClickCallback.add(() => {this.all_agent_one_episode()})
@@ -1684,23 +1697,30 @@ class ReinforcementLearningDemo{
         this.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
         this.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
         
-        this.grid_env_view.ctrl_click_callback.add((x, y) => {
-            
-            var state = this.env.coordinate_to_state(x, y)
-            var type = this.env.get_type(state)
-            type = (type == "H")? "F" : "H"
-            var success = this.env.modify(state, type)
-            if(success){
-                this.grid_env_view.setState(x, y, this.env.getMap()[y][x])
-                this.grid_env_view.setReward(x, y, this.env.getRewardMap()[y][x])
-            }
-            // this.env_view.setArrowsMap(this.agentGroup)/
-        })
+        this.checkBoxListDom.objects["Oblivion"].onChangedCallBack.add((checked) => this.get_selected_agent().use_oblivion = checked)
+        this.checkBoxListDom.objects["Test"].onChangedCallBack.add((checked) => console.log(checked))
+
+
+        this.grid_env_view.ctrl_click_callback.add((x, y) => this.change_map_cell(x, y))
+        this.grid_env_view.onDoubleClickCallback.add((x, y) => this.change_map_cell(x, y))
         this.grid_env_view.click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
         this.grid_env_view.setStateMap(this.env.getMap())
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
         this.grid_env_view.setRewardMap(this.env.getRewardMap())
 
+
+
+    }
+    change_map_cell(x, y){
+        var state = this.env.coordinate_to_state(x, y)
+        var type = this.env.get_type(state)
+        type = (type == "H")? "F" : "H"
+        var success = this.env.modify(state, type)
+        if(success){
+            this.grid_env_view.setState(x, y, this.env.getMap()[y][x])
+            this.grid_env_view.setReward(x, y, this.env.getRewardMap()[y][x])
+        }
+        // this.env_view.setArrowsMap(this.agentGroup)/
     }
     
     update_grid_env_view_cell_value(state){
@@ -2049,6 +2069,46 @@ class CellInforViewerObject{
     }
 }
 
+
+class CheckBoxList{
+    constructor(names){
+        this.element = this.createElement()
+        this.objects = {}
+        for(var name of names){
+            this.objects[name] =  new CheckBox(name)
+            this.element.appendChild(this.objects[name].getElement())   
+        }
+    }
+
+    createElement(){
+        return document.createElement("div");
+    }
+    getElement(){
+        return this.element
+    }
+}
+
+class CheckBox{
+    constructor(name="name"){
+        this.element = document.createElement("div");
+        this.element.innerHTML = `
+            <label><input type="checkbox" name="color" value="blue"> ${name}</label>
+        `
+        this.checkBox = this.element.getElementsByTagName("input")[0]
+        
+        this.onChangedCallBack = new Callback_1()
+        this.checkBox.onchange = (event) => this.onChangedCallBack.invoke(event.currentTarget.checked)
+    }
+
+    getElement(){
+        return this.element
+    }
+}
+
+
+    
+
 operator = new ReinforcementLearningDemo(10, 1, 0.7)
 document.body.appendChild(operator.getElement())
+
 
