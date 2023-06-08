@@ -649,11 +649,11 @@ class AgentGrupe{
 
         // this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.tw)
 
-        // this.q_value_table = new ActionValueModel (states, actions, this.q_default_value, this.q_step_size, this.q_gamma)
-        // this.q_value_model = new ActionRewardModel(states, actions, this.q_model_mean, this.q_model_variance, this.q_model_step_size)
+        // this.q_value_table = new StateActionValueModel (states, actions, this.q_default_value, this.q_step_size, this.q_gamma)
+        // this.q_value_model = new ActionRewardModel(states, actions, this.q_model_mean, this.q_model_variance, this.Stateq_model_step_size)
 
-        // this.e_value_table = new ActionValueModel (states, actions, this.e_default_value, this.e_step_size, this.e_gamma)
-        // this.e_value_model = new ActionRewardModel(states, actions, this.e_model_mean, this.e_model_variance, this.e_model_step_size, false)
+        // this.e_value_table = new StateActionValueModel (states, actions, this.e_default_value, this.e_step_size, this.e_gamma)
+        // this.e_value_model = new ActionRewardModel(states, actions, this.e_model_mean, this.e_model_variance, this.e_modelState_step_size, false)
 
         // this.tau_value_table = new ActionTauTable(states, actions)
 
@@ -722,7 +722,6 @@ class GausianModel{
     }
 
     update_stable(value){
-        return false
         var p_value = this.p_value(value)
         this.mean_p_value += 0.3*(p_value - this.mean_p_value)
         // console.log("mean_p_value", this.mean_p_value)
@@ -830,7 +829,7 @@ class ActionTauTable{
 
 
 
-class ActionValueModel{
+class StateActionValueModel{
     constructor(states, actions, mean, variance, step_size = 0.1, gamma = 0.99){
         
         this.states = states
@@ -908,6 +907,7 @@ class ActionValueModel{
         }
         return valueMap
     }
+
     get_values_for_state(state){
         var qValues  = []
         for(var x of this.value_table[state]){
@@ -916,8 +916,10 @@ class ActionValueModel{
         return qValues
     }
 
+
+
 }
-class ActionRewardModel{
+class StateActionRewardModel{
 
     constructor(states, actions, mean, variance, step_size, no_variance = false){
         this.max_size = 10000
@@ -1034,8 +1036,8 @@ class ValueManager{
 
         this.seg_arg(args[0])
 
-        this.value_table = new ActionValueModel(states, actions, this.q_value_mean, this.q_value_variance, this.q_value_step_size, this.discounting_factor)
-        this.reward_model = new ActionRewardModel(states, actions, this.reward_mean, this.reward_variance, this.reward_step_size, {no_variance : false}) 
+        this.value_table = new StateActionValueModel(states, actions, this.q_value_mean, this.q_value_variance, this.q_value_step_size, this.discounting_factor)
+        this.reward_model = new StateActionRewardModel(states, actions, this.reward_mean, this.reward_variance, this.reward_step_size, {no_variance : false})
         
         this.after_action_value_update_callback = new Callback_2() // state, action
     }
@@ -1139,6 +1141,7 @@ class ValueManager{
         return this.value_table.getValueMap()
     }
 
+
     get_values_for_state(state){
         return this.value_table.get_values_for_state(state)
     }
@@ -1161,6 +1164,8 @@ class ValueManager{
 
 }
 
+
+
 class Policy{
     constructor(agent, epsilon = 0.03, kappa = 0.000){
         this.agent = agent
@@ -1168,35 +1173,35 @@ class Policy{
         this.kappa = kappa // tau weight (kappa)
     }
 
-
-    getTValueForState(state){
-        var tau = this.agent.get_tau_value_table().value_table[state]
-        tau = util.vSquare([...tau], 0.5)
-        return tau
-    }
-    getQValueForState(state){
-        return this.agent.q_manager.get_values_for_state(state)
-    }
-    getValueForState(state){
-        var qValue = this.getQValueForState(state)
-        var tValue = this.getTValueForState(state)
-        tValue = util.vConstMul(tValue, this.kappa)
-        return util.vAdd(qValue, tValue)
+    greedy_choose(values){
+        var max_index_list = util.argMax(values, {all:true})
+        var index = util.randomChoice(max_index_list)
+        return this.agent.actions[index]
     }
 
-    choose_action(state){
-        var values = this.getValueForState(state)
+    random_choose(values){
+        return util.randomChoice(this.agent.actions)
+    }
+
+    epsilon_greedy_choose(values){
         if (Math.random() < this.epsilon){
-            return util.randomChoice(this.agent.actions)            
+            return this.random_choose(values)            
         }else{
-            var max_index_list = util.argMax(values, {all:true})
-            var index = util.randomChoice(max_index_list)
-            return this.agent.actions[index]
+            return this.greedy_choose(values)
         }
     }
 
+    get_action_values_for_state(state){
+        console.log('미구현 abstract function')
+    }
+
+    choose_action(state){
+        var action_values = this.get_action_values_for_state(state)
+        return this.epsilon_greedy_choose(action_values)
+    } 
+    
     getStateValue(state){
-        var qValues = this.getValueForState(state)
+        var qValues = this.get_action_values_for_state(state)
         return Math.max(...qValues)
     }
 
@@ -1207,60 +1212,49 @@ class Policy{
         }
         return valueMap
     }
-
 }
 
-class SoftMaxPolicy extends Policy{
-    constructor(agent, epsilon = 0.03, qw = 1, ew = 0.01, bw = 0.01, tw = 0.000){
-        super(agent, epsilon, qw, ew, bw, tw)
+
+class ExploitationPolicy extends Policy{
+    get_action_values_for_state(state){
+        var qValue = this.agent.q_manager.get_values_for_state(state)
+
+        var tau = this.agent.get_tau_value_table().value_table[state]
+        var tValue = util.vSquare([...tau], 0.5)
+
+        tValue = util.vConstMul(tValue, this.kappa)
+        return util.vAdd(qValue, tValue)
     }
-
-        choose_action(state){
-            var values = this.getValueForState(state)
-            for(var i=0 ; i<values.length ; i++){
-                values[i] = Math.exp(values[i])
-            }
-            var sum = util.sum(values)
-            values = util.vConstMul(values, 1/sum)
-            return this.agent.actions[util.argProbability(values)]
-        }
 }
-class WeightPolicy extends Policy{
-    constructor(agent, epsilon = 0.03, qw = 1, ew = 0.01, bw = 0.01, tw = 0.000){
-        super(agent, epsilon, qw, ew, bw, tw)
+
+class ExplorationPolicy extends Policy{
+    get_action_values_for_state(state){
+        var eqValue = this.agent.eq_manager.get_values_for_state(state)
+
+        var tau = this.agent.get_tau_value_table().value_table[state]
+        var tValue = util.vSquare([...tau], 0.5)
+
+        tValue = util.vConstMul(tValue, this.kappa)
+        return util.vAdd(eqValue, tValue)
     }
-
-        choose_action(state){
-            var qValue = this.getQValueForState(state)
-            var eValue = this.getEValueForState(state)
-            var bValue = this.getBValueForState(state)
-            var tValue = this.getTValueForState(state)
-            qValue = util.vConstMul(qValue, this.qw)
-            eValue = util.vConstMul(eValue, this.ew)
-            bValue = util.vConstMul(bValue, this.bw)
-            tValue = util.vConstMul(tValue, this.tw)
-
-            eValue = util.vAdd(util.vAdd(eValue, bValue), tValue)
-            var values = (Math.max(...eValue) < Math.max(...qValue)) ? qValue : eValue
-            
-            var max_index_list = util.argMax(values, {all:true})
-            var index = util.randomChoice(max_index_list)
-            return this.agent.actions[index]
-
-        }
 }
 
+const PolicyMode = {
+    Exploration: "exploration",
+    Exploitation: "exploitation"
+}
 class Agent{
     constructor(states, actions){
 
         // group & sharing option
         this.group = null        
         this.q_sharing = false
+        this.eq_sharing = false
 
         this.tau_value_table_sharing = false
         
         this.policy_sharing = false
-        this.reward_policy_sharing = false
+        this.e_policy_sharing = false
     
         this.memory_sharing = false
 
@@ -1279,23 +1273,21 @@ class Agent{
 
         this.use_oblivion = false
 
-
+        this.policy_mode = PolicyMode.Exploitation
 
         this._memory = new Memory(states, actions)
 
         // Policy
-        this._policy = new Policy(this)
+        this._policy = new ExploitationPolicy(this)
+        this._e_policy = new ExplorationPolicy(this)
         // this.policy = new SoftMaxPolicy(this, this.epsilon, this.kappa)
-        this.epsilon = 0.01
-        this.kappa = 0.00001
-
         
         var q_value_manager_args = {
             q_value_mean : 0,
             q_value_variance : 1,
             q_value_step_size : 0.3,
 
-            discounting_factor : 0.99,
+            discounting_factor : 0.95,
             reward_mean : 0,
             reward_variance : 0,
             reward_step_size : 0.5,
@@ -1305,6 +1297,19 @@ class Agent{
 
         this._q_manager = new ValueManager(states, actions, q_value_manager_args)
         this._q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
+
+        var eq_value_manager_args = {
+            q_value_mean : 0,
+            q_value_variance : 1,
+            q_value_step_size : 0.3,
+
+            discounting_factor : 0.95,
+            reward_mean : 0,
+            reward_variance : 0,
+            reward_step_size : 0.9,
+            planning_num : 100,
+        }
+        this._eq_manager = new ValueManager(states, actions, eq_value_manager_args)
 
         this.tau_value_table = new ActionTauTable(states, actions)
 
@@ -1319,7 +1324,7 @@ class Agent{
         this.total_step = 0
 
     }
-
+    
     set epsilon(value){
         this.policy.epsilon = value
     }
@@ -1344,6 +1349,33 @@ class Agent{
     }
     get step_size(){
         return this.q_manager.step_size
+    }
+
+    get q_manager() {
+        return (this.group != null && this.q_sharing) ? this.group._q_manager : this._q_manager
+    }
+    get policy() {
+        switch(this.policy_mode){
+            case PolicyMode.Exploitation:
+                console.log("착취")
+                return (this.group != null && this.policy_sharing) ? this.group._policy : this._policy
+            case PolicyMode.Exploration:
+                console.log("탐색")
+                return (this.group != null && this.e_policy_sharing) ? this.group._e_policy : this._e_policy
+        }
+        new Error("구현되지 않음")
+        
+    }
+    get memory(){
+        return (this.group != null && this.memory_sharing) ? this.group._memory : this._memory
+    }
+
+    get eq_manager(){
+        return (this.group != null && this.eq_sharing) ? this.group._eq_manager : this._eq_manager
+    }
+
+    get_state_e_value(state){
+        return this.eq_manager.getStateValue(state) 
     }
 
     reset_all(){
@@ -1379,19 +1411,12 @@ class Agent{
         }
     }
 
-    get q_manager() {
-        return (this.group != null && this.q_sharing) ? this.group._q_manager : this._q_manager
-    }
-    get policy() {
-        return (this.group != null && this.policy_sharing) ? this.group._policy : this._policy
-    }
-    get memory(){
-        return (this.group != null && this.memory_sharing) ? this.group._memory : this._memory
-    }
+
     
     start(state){
         this.finished = false
         this.past_state = state;
+        
         this.past_action = this.policy.choose_action(state);
         return this.past_action;
     }
@@ -1399,13 +1424,17 @@ class Agent{
     step(reward, state, finished){
         reward += this.default_reward
         var distribution_changed = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
+        var e_reward = (distribution_changed == true) ? 0.1 : 0
+        e_reward += this.default_reward
+    
         if(this.use_oblivion && distribution_changed == true){
-            this.q_manager.reset(this.past_state, this.past_action, state)
-        }
-
-        this.memory.count_state_action_and_check_first(this.past_state, this.past_action)
+            this.q_manager.reset(this.past_state, this.past_action, state)   
+        }    
 
         this.q_manager.planning()
+
+        this.eq_manager.update(this.past_state, this.past_action, e_reward, state)
+        this.eq_manager.planning()
 
         // select action
         var action = this.get_policy().choose_action(state)
@@ -1425,6 +1454,9 @@ class Agent{
         return this.past_action
     }
 
+    get_value_map(){
+
+    }
 }
 
 class FrozenLake{
@@ -1618,43 +1650,56 @@ class ReinforcementLearningDemo{
     constructor(map_size, agent_num, frozen_ratio){
         this.element = document.createElement("div");
         this.element.innerHTML = `
-        <div class="buttons"></div>
-        <hbox>
-            <div class="env_view"></div>
-            <div>
-                <div class="sliders"></div>
-                <div class="check_box_list"></div>
+            <div class="buttons"></div>
+            <hbox>
+                <div class="env_view"></div>
+                <div>
+                    <div class="controller"></div>
+                    <div class="sliders"></div>
+                    <div class="check_box_list"></div>
+                </div>        
+            </hbox>
+            <hbox>
                 <div class="information_view"></div>
-            </div>        
-        </hbox>
-
+                <div class="cell_information_view"></div>
+            </hbox>
         `
         this.selected_cell = 0
         this.selected_agent_idx = 0
         this.agent_num = agent_num
         this.map_size = map_size
         
+        this.show_exploration_value = false
+
         this.speed = 100
 
         this.buttonListDom = new ButtonListObect(["New Map", "Reset Value", "Reset Model", "One Step", "One Episode", "Continue"])
         this.element.getElementsByClassName("buttons")[0].appendChild(this.buttonListDom.getElement())
 
-        this.checkBoxListDom = new CheckBoxList(["Oblivion", "Test"])
-        this.element.getElementsByClassName("check_box_list")[0].appendChild(this.checkBoxListDom.getElement())
-
         this.grid_env_view = new GridEnvironmentView(map_size, map_size, 50);
         this.element.getElementsByClassName("env_view")[0].appendChild(this.grid_env_view.getElement())
 
-        this.sliderListDom = new SliderListObject(["Speed", "Epsilon", "Kappa", "Gamma", "Step Size"])
-        this.element.getElementsByClassName("sliders")[0].appendChild(this.sliderListDom.getElement())
+        this.controller_view = new ControllerView()
+        this.element.getElementsByClassName("controller")[0].appendChild(this.controller_view.getElement())
+
+        // this.sliderListDom = new SliderListObject(["Speed", "Epsilon", "Kappa", "Gamma", "Step Size"])
+        // this.element.getElementsByClassName("sliders")[0].appendChild(this.sliderListDom.getElement())
         
-        this.informationViewer = new InformationViewer();
-        this.element.getElementsByClassName("information_view")[0].appendChild(this.informationViewer.getElement())
+        // this.checkBoxListDom = new CheckBoxList(["use_oblivion", "use_exploration_reward"])
+        // this.element.getElementsByClassName("check_box_list")[0].appendChild(this.checkBoxListDom.getElement())
+
+
         
         this.cell_infor_view = new CellInforViewerObject()
-        this.element.appendChild(this.cell_infor_view.getElement())
+        this.element.getElementsByClassName("cell_information_view")[0].appendChild(this.cell_infor_view.getElement())
+
+        this.informationViewer = new InformationViewer();
+        this.element.getElementsByClassName("information_view")[0].appendChild(this.informationViewer.getElement())
 
         this.env = new FrozenLake(map_size, frozen_ratio)
+        
+
+
 
         // agentGroup
         this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
@@ -1691,14 +1736,33 @@ class ReinforcementLearningDemo{
         this.buttonListDom.objects["One Episode"].OnClickCallback.add(() => {this.all_agent_one_episode()})
         this.buttonListDom.objects["Continue"].OnClickCallback.add(() => {this.all_agent_infinite_step()})
 
-        this.sliderListDom.objects["Speed"].OnInputCallback.add((value) => this.speed = (1000**(1-value)))
-        this.sliderListDom.objects["Epsilon"].OnInputCallback.add((value) => this.get_selected_agent().epsilon = value)
-        this.sliderListDom.objects["Kappa"].OnInputCallback.add((value) => this.get_selected_agent().kappa = value*0.001)
-        this.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
-        this.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
+
+        this.controller_view.main_controller_view.sliderListDom.objects["Speed"].OnInputCallback.add((value) => this.speed = (1000**(1-value)))
+        this.controller_view.main_controller_view.checkBoxListDom.objects["use_oblivion"].onChangedCallBack.add((checked) => {this.get_selected_agent().use_oblivion = checked})
+
+
+        this.controller_view.policy_controller_view.sliderListDom.objects["Epsilon"].OnInputCallback.add((value) => this.get_selected_agent().epsilon = value)
+        this.controller_view.policy_controller_view.sliderListDom.objects["Kappa"].OnInputCallback.add((value) => this.get_selected_agent().kappa = value*0.001)
+        this.controller_view.policy_controller_view.buttonDom.OnClickCallback.add(() => {
+            this.get_selected_agent().policy_mode = PolicyMode.Exploitation
+            console.log("착취모드")
+            console.log(this.get_selected_agent().policy_mode)
+        })
         
-        this.checkBoxListDom.objects["Oblivion"].onChangedCallBack.add((checked) => this.get_selected_agent().use_oblivion = checked)
-        this.checkBoxListDom.objects["Test"].onChangedCallBack.add((checked) => console.log(checked))
+        this.controller_view.value_controller_view.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
+        this.controller_view.value_controller_view.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
+
+
+        this.controller_view.e_policy_controller_view.sliderListDom.objects["Epsilon"].OnInputCallback.add((value) => this.get_selected_agent().epsilon = value)
+        this.controller_view.e_policy_controller_view.sliderListDom.objects["Kappa"].OnInputCallback.add((value) => this.get_selected_agent().kappa = value*0.001)
+        this.controller_view.e_policy_controller_view.buttonDom.OnClickCallback.add(() => {this.get_selected_agent().policy_mode = PolicyMode.Exploration
+            console.log("탐색 모드")
+            console.log(this.get_selected_agent().policy_mode)
+        })
+
+        this.controller_view.e_value_controller_view.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
+        this.controller_view.e_value_controller_view.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
+
 
 
         this.grid_env_view.ctrl_click_callback.add((x, y) => this.change_map_cell(x, y))
@@ -1707,8 +1771,6 @@ class ReinforcementLearningDemo{
         this.grid_env_view.setStateMap(this.env.getMap())
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
         this.grid_env_view.setRewardMap(this.env.getRewardMap())
-
-
 
     }
     change_map_cell(x, y){
@@ -1726,8 +1788,8 @@ class ReinforcementLearningDemo{
     update_grid_env_view_cell_value(state){
         var x, y
         [x, y] = this.env.state_to_coordinate(state)
-        var state_value = this.agentGroup.agents[0].get_policy().getStateValue(state)
-        var action_value = this.agentGroup.agents[0].get_policy().getValueForState(state)
+        var state_value = this.agentGroup.agents[0].policy.getStateValue(state)
+        var action_value = this.agentGroup.agents[0].policy.get_action_values_for_state(state)
         this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
         this.grid_env_view.setArrows(x, y, action_value)
     }
@@ -1912,7 +1974,7 @@ class SliderObject{
     createElement(name){
         var element = document.createElement("div");
         element.innerHTML = `
-        <div><span></span>:<span></span></div>
+        <div><span></span>: <span></span></div>
         <div><input type="range" name="points" min="0" max="1.0" step="0.01" value="0"></div>
         `
         var name = element.getElementsByTagName("span")[0]
@@ -2001,6 +2063,7 @@ class InformationViewer{
 
     createElement(){
         var element = document.createElement("div");
+        element.className = "module"
         return element}
 }
 
@@ -2022,6 +2085,7 @@ class CellInforViewerObject{
     }
     createElement(){
         var element = document.createElement("div");
+        element.className = "module"
         return element
     }
 
@@ -2069,6 +2133,98 @@ class CellInforViewerObject{
     }
 }
 
+class ControllerView{
+    constructor(name){
+        this.element = document.createElement("div")
+        this.element.innerHTML = `
+        <div>
+            <div class="main_controller"></div>
+            <hbox>
+                <div class="exploitation_policy"></div>
+                <div class="exploration_policy"></div>
+            </hbox>
+            <hbox>
+                <div class="exploitation_value"></div>
+                <div class="exploration_value"></div>
+            </hbox>
+        </div>
+        `
+        
+        this.main_controller_view = new MainControllerView()
+        this.policy_controller_view = new PolicyControllerView("Policy")
+        this.value_controller_view = new ValueControllerView("Value")
+
+        this.e_policy_controller_view = new PolicyControllerView("Exploration_Policy")
+        this.e_value_controller_view = new ValueControllerView("Exploration_Value")
+
+
+        this.element.getElementsByClassName("main_controller")[0].appendChild(this.main_controller_view.getElement())
+        
+        this.element.getElementsByClassName("exploitation_policy")[0].appendChild(this.policy_controller_view.getElement())
+        this.element.getElementsByClassName("exploitation_value")[0].appendChild(this.value_controller_view.getElement())
+        this.element.getElementsByClassName("exploration_policy")[0].appendChild(this.e_policy_controller_view.getElement())
+        this.element.getElementsByClassName("exploration_value")[0].appendChild(this.e_value_controller_view.getElement())
+    }
+
+    getElement(){
+        return this.element
+    }
+}
+class MainControllerView{
+    constructor(){
+        this.element = document.createElement("div")
+        this.element.className = "module"
+
+        this.sliderListDom = new SliderListObject(["Speed"])
+        this.element.appendChild(this.sliderListDom.getElement())
+
+        this.checkBoxListDom = new CheckBoxList(["use_oblivion"])
+        this.element.appendChild(this.checkBoxListDom.getElement())
+    }
+
+    getElement(){
+        return this.element
+    }
+}
+
+
+
+class PolicyControllerView{
+    constructor(name){
+        this.element = document.createElement("div");
+        this.element.className = "module"
+        this.element.innerHTML = `
+            <div><label><b>${name}</b></label></div>
+        `
+        this.sliderListDom = new SliderListObject(["Epsilon", "Kappa"])
+        this.buttonDom = new ButtonObject("Change")
+        
+
+        this.element.appendChild(this.sliderListDom.getElement())        
+        this.element.appendChild(this.buttonDom.getElement())
+    }
+    getElement(){
+        return this.element
+    }
+}
+
+class ValueControllerView{
+    constructor(name){
+        this.element = document.createElement("div");
+        this.element.className = "module"
+        this.element.innerHTML = `
+            <div><label><b>${name}</b></label></div>
+        `
+        this.sliderListDom = new SliderListObject(["Gamma", "Step Size"])
+        this.buttonDom = new ButtonObject("Show")
+
+        this.element.appendChild(this.sliderListDom.getElement())        
+        this.element.appendChild(this.buttonDom.getElement())
+    }
+    getElement(){
+        return this.element
+    }
+}
 
 class CheckBoxList{
     constructor(names){
