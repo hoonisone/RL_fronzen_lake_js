@@ -922,7 +922,7 @@ class StateActionValueModel{
 class StateActionRewardModel{
 
     constructor(states, actions, mean, variance, step_size, no_variance = false){
-        this.max_size = 10000
+        this.max_size = 500
         this.samples = []
         
         this.mean = mean
