@@ -4,6 +4,17 @@
 // import { random } from "numjs";
 
 const wait = (timeToDelay) => new Promise((resolve) => setTimeout(resolve, timeToDelay))
+class list_util{
+    static sum(v){
+        v = [...v]
+        return v.reduce((a, b) => a+b, 0)
+    }
+
+    static mean(v){
+        return list_util.sum(v)/v.length
+    }
+}
+
 class util{
     array_functions = []
     static argMax(array, all=false) {
@@ -696,6 +707,112 @@ class AgentGrupe{
         return this.memory
     }
 }
+// class GaussianModel2{
+//     constructor{
+//         this.mean = 0
+//         this.variance = 1
+//     }
+// }
+class ShortTermSampleModel{
+    constructor(max_buffer_size = 10){
+        this.buffer = []
+        this.max_buffer_size = max_buffer_size
+        console.log("buffer_size", this.max_buffer_size)
+    }
+
+    update(sample){
+        this.buffer.push(sample)
+        return  (this.max_buffer_size < this.buffer.length) ? this.buffer.shift() : null
+    }
+
+    get_sample(){
+        return (this.buffer.length == this.max_buffer_size) ? list_util.mean(this.buffer) : null
+    }
+}
+
+class LongTermDistributionModel{
+    static MIN_STD = 0.00000000000000001
+    constructor(){
+        this.mean = 0
+        this.variance = 1
+        this.size = 0
+        this.min_step_size = 0.01
+    }
+
+    update(sample){
+        this.size += 1
+        var step_size = Math.max(1/this.size, this.min_step_size)
+        this.variance += step_size*((sample-this.mean)**2 - this.variance)
+        this.mean += step_size*(sample-this.mean)
+    }
+
+    get_z(sample){
+        return (sample-this.mean)/Math.max(this.variance**(0.5), LongTermDistributionModel.MIN_STD) 
+    }
+
+    forget(forget_ratio){
+        this.size = parseInt(this.size*(1-forget_ratio))
+
+    }
+}
+
+class AdaptableModel{
+    constructor(){
+        this.ltdm = new LongTermDistributionModel()
+        this.stsm = new ShortTermSampleModel(5)
+
+        this.forget_ratio = 0.8
+        this.z_threshold = 2.33 // p_value 0.01
+    }
+
+    update(sample){
+        var changed = this.check_distribution_change()
+        if(changed){
+            this.ltdm.forget(this.forget_ratio)
+        }
+        var front = this.stsm.update(sample)
+        if(front != null){
+            this.ltdm.update(front)
+        }
+
+        return changed
+    }
+
+    check_distribution_change(){
+        var sample_mean = this.stsm.get_sample()
+        if(sample_mean == null){
+            return false
+        }
+        var z = Math.abs(this.ltdm.get_z(sample_mean))
+        return this.z_threshold < z
+    }
+
+    get mean(){
+        return this.ltdm.mean
+    }
+
+    get variance(){
+        return this.ltdm.variance
+    }
+
+    get std(){
+        return this.ltdm.variance**(0.5)
+    }
+}
+function gaussianRandom() {
+    var v1, v2, s;
+  
+    do {
+      v1 = 2 * Math.random() - 1;   // -1.0 ~ 1.0 까지의 값
+      v2 = 2 * Math.random() - 1;   // -1.0 ~ 1.0 까지의 값
+      s = v1 * v1 + v2 * v2;
+    } while (s >= 1 || s == 0);
+  
+    s = Math.sqrt( (-2 * Math.log(s)) / s );
+  
+    return v1 * s;
+}
+
 class GausianModel{
     static MIN_VARIANCE = 0.0000000000000000000001 // 최소 분산 (to avoid zero divide)
     constructor(mean, variance, step_size=0.1, no_variance = false){
