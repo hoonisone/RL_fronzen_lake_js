@@ -27,7 +27,7 @@ class ReinforcementLearningDemo{
                 <div class="cell_information_view"></div>
             </hbox>
         `
-        this.selected_cell = 0
+        this.selected_cell = -1
         this.selected_agent_idx = 0
         this.agent_num = agent_num
         this.map_size = map_size
@@ -44,14 +44,6 @@ class ReinforcementLearningDemo{
 
         this.controller_view = new ControllerView()
         this.element.getElementsByClassName("controller")[0].appendChild(this.controller_view.getElement())
-
-        // this.sliderListDom = new SliderListObject(["Speed", "Epsilon", "Kappa", "Gamma", "Step Size"])
-        // this.element.getElementsByClassName("sliders")[0].appendChild(this.sliderListDom.getElement())
-        
-        // this.checkBoxListDom = new CheckBoxList(["use_oblivion", "use_exploration_reward"])
-        // this.element.getElementsByClassName("check_box_list")[0].appendChild(this.checkBoxListDom.getElement())
-
-
         
         this.cell_infor_view = new CellInforViewerObject()
         this.element.getElementsByClassName("cell_information_view")[0].appendChild(this.cell_infor_view.getElement())
@@ -61,28 +53,22 @@ class ReinforcementLearningDemo{
 
         this.env = new FrozenLake(map_size, frozen_ratio)
         
-
-
-
-        // agentGroup
-        this.agentGroup = new AgentGrupe(this.env.getStates(), this.env.getActions())
-
-        this.agentGroup.goal_callback.add(() => this.informationViewer.goal += 1)
-        this.agentGroup.hall_callback.add(() => this.informationViewer.hall += 1)
-        this.agentGroup.after_step_callback.add(() => this.informationViewer.step += 1)
-        this.agentGroup.first_state.add((state) => {this.informationViewer.state += 1})
-        this.agentGroup.first_state_action.add((state, action) => this.informationViewer.state_action += 1)
-        this.agentGroup.after_action_value_update_callback.add((state, action) => {
+        this.agent = new Agent(this.env.getStates(), this.env.getActions())
+        this.agent.goal_callback.add(() => this.informationViewer.goal += 1)
+        this.agent.hall_callback.add(() => this.informationViewer.hall += 1)
+        this.agent.after_step_callback.add(() => this.informationViewer.step += 1)
+        this.agent.first_state.add((state) => {this.informationViewer.state += 1})
+        this.agent.first_state_action.add((state, action) => this.informationViewer.state_action += 1)
+        this.agent.after_action_value_update_callback.add((state, action) => {
             this.update_grid_env_view_cell_value(state)
-        })
+            if(state == this.selected_cell){
+                this.cell_infor_view.q_value = this.agent.get_q_values_for_state(state)
+                this.cell_infor_view.tau = this.agent.get_tau_values_for_state(state)
+            }
 
-        this.agents = []
-        for(var i=0 ; i<this.agent_num ; i++){
-            var agent = new Agent(this.env.getStates(), this.env.getActions())
-            this.agents.push(agent)
-            this.agentGroup.addAgent(agent)
-        }     
-        
+        })
+        this.agent.policy.epsilon_auto_change_callback.add((epsilon => {this.controller_view.policy_controller_view.epsilon_slider.value = math_util.floor(epsilon, 3)}))
+        this.agent.policy.kappa_auto_change_callback.add((kappa => {this.controller_view.policy_controller_view.kappa_slider.value = math_util.floor(kappa, 5)}))
 
         this.buttonListDom.objects["New Map"].OnClickCallback.add(() => {
             this.env.new_map()
@@ -94,26 +80,25 @@ class ReinforcementLearningDemo{
         })
 
 
-        this.buttonListDom.objects["Reset Model"].OnClickCallback.add(() => {this.get_selected_agent().reset_all_model()})
-        this.buttonListDom.objects["One Step"].OnClickCallback.add(() => {this.all_agent_one_step()})
-        this.buttonListDom.objects["One Episode"].OnClickCallback.add(() => {this.all_agent_one_episode()})
-        this.buttonListDom.objects["Continue"].OnClickCallback.add(() => {this.all_agent_infinite_step()})
+        this.buttonListDom.objects["Reset Model"].OnClickCallback.add(() => {this.agent.reset_all_model()})
+        this.buttonListDom.objects["One Step"].OnClickCallback.add(() => {this.one_step()})
+        this.buttonListDom.objects["One Episode"].OnClickCallback.add(() => {this.one_episode()})
+        this.buttonListDom.objects["Continue"].OnClickCallback.add(() => {this.infinite_step()})
 
 
         this.controller_view.main_controller_view.sliderListDom.objects["Speed"].OnInputCallback.add((value) => this.speed = (1000**(1-value)))
-        this.controller_view.main_controller_view.checkBoxListDom.objects["use_oblivion"].onChangedCallBack.add((checked) => {this.get_selected_agent().use_oblivion = checked})
+        this.controller_view.main_controller_view.checkBoxListDom.objects["use_oblivion"].onChangedCallBack.add((checked) => {this.agent.use_oblivion = checked})
 
 
-        this.controller_view.policy_controller_view.sliderListDom.objects["Epsilon"].OnInputCallback.add((value) => this.get_selected_agent().epsilon = value)
-        this.controller_view.policy_controller_view.sliderListDom.objects["Kappa"].OnInputCallback.add((value) => this.get_selected_agent().kappa = value*0.001)
-        this.controller_view.policy_controller_view.buttonDom.OnClickCallback.add(() => {
-            this.get_selected_agent().policy_mode = PolicyMode.Exploitation
-            console.log("착취모드")
-            console.log(this.get_selected_agent().policy_mode)
-        })
+        this.controller_view.policy_controller_view.epsilon_slider.OnInputCallback.add((value) => this.agent.epsilon = value)
+        this.controller_view.policy_controller_view.epsilon_check_box.onChangedCallBack.add((checked) => {this.agent.policy.use_auto_epsilon = checked})
+        this.controller_view.policy_controller_view.kappa_slider.OnInputCallback.add((value) => this.agent.kappa = value*0.001)
+        this.controller_view.policy_controller_view.kappa_check_box.onChangedCallBack.add((checked) => {this.agent.policy.use_auto_kappa = checked})
+
+ 
         
-        this.controller_view.value_controller_view.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.get_selected_agent().gamma = value)
-        this.controller_view.value_controller_view.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.get_selected_agent().step_size = value)
+        this.controller_view.value_controller_view.sliderListDom.objects["Gamma"].OnInputCallback.add((value) => this.agent.gamma = value)
+        this.controller_view.value_controller_view.sliderListDom.objects["Step Size"].OnInputCallback.add((value) => this.agent.step_size = value)
 
         this.grid_env_view.ctrl_click_callback.add((x, y) => this.change_map_cell(x, y))
         this.grid_env_view.onDoubleClickCallback.add((x, y) => this.change_map_cell(x, y))
@@ -138,8 +123,8 @@ class ReinforcementLearningDemo{
     update_grid_env_view_cell_value(state){
         var x, y
         [x, y] = this.env.state_to_coordinate(state)
-        var state_value = this.agentGroup.agents[0].get_state_value(state)
-        var action_value = this.agentGroup.agents[0].get_q_values_for_state(state)
+        var state_value = this.agent.get_state_value(state)
+        var action_value = this.agent.get_q_values_for_state(state)
         this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
         this.grid_env_view.setArrows(x, y, action_value)
     }
@@ -165,18 +150,27 @@ class ReinforcementLearningDemo{
         this.cell_infor_view.tau = this.agents[0].tau_value_table.get_taus_for_state(state)
     }
 
-    one_step(agent_idx){
+    initAgent(){
+        let x, y
+        [x, y] = this.env.state_to_coordinate(this.agent.past_state)
+        this.grid_env_view.showAgent(x, y, 0, false)
+
+        this.agent.start(0)
+        this.grid_env_view.showAgent(0, 0, 0, true)
+    }
+
+    one_step(){
         // agent 지우기 
-        var agent = this.agents[agent_idx]
+        var agent = this.agent
         if(agent.finished){
-            this.initAgent(agent_idx)
+            this.initAgent()
             let x, y
             [x, y] = this.env.state_to_coordinate(agent.past_state)
-            this.grid_env_view.showAgent(x, y, agent_idx, true)
+            this.grid_env_view.showAgent(x, y, 0, true)
         }else{
             let x, y
             [x, y] = this.env.state_to_coordinate(agent.past_state)
-            this.grid_env_view.showAgent(x, y, agent_idx, false)
+            this.grid_env_view.showAgent(x, y, 0, false)
             
         
             // agent 액션 수행
@@ -186,7 +180,7 @@ class ReinforcementLearningDemo{
             // agent 그리기
             let nx, ny
             [nx, ny] = this.env.state_to_coordinate(state)
-            this.grid_env_view.showAgent(nx, ny, agent_idx, true)
+            this.grid_env_view.showAgent(nx, ny, 0, true)
             
 
             if (done == true){
@@ -205,56 +199,23 @@ class ReinforcementLearningDemo{
         
     }
 
-    async one_episode(agent_idx){
-        this.initAgent(agent_idx)
-        
+    async one_episode(){
+        this.initAgent()
         while(true){
-            var end = this.one_step(agent_idx)
+            var end = this.one_step()
             if(end){
                 break;
             }
             await wait(this.speed)
         }
     }
-    
-    initAgent(agent_idx){
-        let x, y
-        [x, y] = this.env.state_to_coordinate(this.agents[agent_idx].past_state)
-        this.grid_env_view.showAgent(x, y, agent_idx, false)
 
-        this.agents[agent_idx].start(0)
-        this.grid_env_view.showAgent(0, 0, agent_idx, true)
-    }
-
-    async all_agent_one_step(){
-        for(var i=0 ; i<this.agent_num ; i++){
-            await this.one_step(i)
-            this.update_cell_view(this.selected_cell)
+    async infinite_step(){
+        while(true){
+            await this.one_step()
             await wait(this.speed)
         }
     }
-    async all_agent_one_episode(){
-        while(true){
-            await this.all_agent_one_step()
-        }
-    }
-    async all_agent_infinite_step(){
-        while(true){
-            await this.all_agent_one_step()
-        }
-    }
-    async do(){
-        while(true){
-            await this.n_episode(5, 0, 1)
-            continue
-            for(var i=0 ; i<this.agent_num ; i++){
-                await this.n_episode(i, 1, 1)
-            }
-            
-        }
-
-    }
-
 }
 
 
@@ -268,7 +229,7 @@ class ReinforcementLearningDemo{
 
 
 
-operator = new ReinforcementLearningDemo(7, 1, 0.7)
+operator = new ReinforcementLearningDemo(20, 1, 0.7)
 document.body.appendChild(operator.getElement())
 
 

@@ -25,12 +25,12 @@ class PolicyParameterManager{
         // epsilon
 
         this.min_epsilon = 0.01
-        this.max_epsilon = 1
+        this.max_epsilon = 0.15
         this._epsilon = initial_epsilon
 
         // kappa
 
-        this.max_kappa = 0.01
+        this.max_kappa = 0.001
         this.min_kappa = 0.0001
         this._kappa = initial_kappa
 
@@ -40,8 +40,7 @@ class PolicyParameterManager{
     update(env_changed){
         this.env_change_checker.update(env_changed)
         var env_change_ratio = this.env_change_checker.get_ratio()
-
-        this._epsilon = Math.max(env_change_ratio*this.max_epsilon, this.min_epsilon)
+        this._epsilon = Math.max(env_change_ratio**(0.5)*this.max_epsilon, this.min_epsilon)
         this._kappa = Math.max(env_change_ratio*this.max_kappa, this.min_kappa)
     }
 
@@ -68,13 +67,22 @@ class Policy{
         this.use_auto_epsilon = use_auto_epsilon
         this.use_auto_kappa = use_auto_kappa
         this.parameter_manager = new PolicyParameterManager(epsilon, kappa)
+
+        this.epsilon_auto_change_callback = new Callback_1()
+        this.kappa_auto_change_callback = new Callback_1()
     }
 
     update_parameter(env_changed){
         '환경 변화 여부에 따라 탐색 파라미터 갱신'
         this.parameter_manager.update(env_changed)
-        this.epsilon = this.use_auto_epsilon ? this.parameter_manager.epsilon : this.epsilon
-        this.kappa = this.use_auto_kappa ? this.parameter_manager.kappa : this.kappa   
+        if(this.use_auto_epsilon){
+            this.epsilon = this.parameter_manager.epsilon
+            this.epsilon_auto_change_callback.invoke(this.epsilon)
+        }
+        if(this.use_auto_kappa){
+            this.kappa = this.use_auto_kappa ? this.parameter_manager.kappa : this.kappa   
+            this.kappa_auto_change_callback.invoke(this.kappa)
+        }
     }
 
     greedy_choose(actions, values){
@@ -96,49 +104,16 @@ class Policy{
     }
 
     recalculate_value(q_values, tau){
-        console.log('미구현 abstract function')
-    }
+        var tau_values = util.vSquare([...tau], 0.5)
 
+        tau_values = util.vConstMul(tau_values, this.kappa)
+        return util.vAdd(q_values, tau_values)
+    }
     choose_action(actions, q_values, tau){
         var action_values = this.recalculate_value(q_values, tau)
         return this.epsilon_greedy_choose(actions, action_values)
     } 
-    
-
 }
-
-class AdaptablePolicy extends Policy{
-    constructor(epsilon = 0.05, kappa = 0.000){super(epsilon, kappa, true, true)}
-
-    recalculate_value(q_values, tau){
-        var tau_values = util.vSquare([...tau], 0.5)
-
-        tau_values = util.vConstMul(tau_values, this.kappa)
-        return util.vAdd(q_values, tau_values)
-    }
-}
-
-class StationaryPolicy extends Policy{
-    constructor(epsilon = 0.05, kappa = 0.000){super(epsilon, kappa, false, false)}
-}
-
-class ExploitationPolicy extends StationaryPolicy{
-    recalculate_value(q_values, tau){
-        var tau_values = util.vSquare([...tau], 0.5)
-
-        tau_values = util.vConstMul(tau_values, this.kappa)
-        return util.vAdd(q_values, tau_values)
-    }
-}
-
-// class ExplorationPolicy extends StationaryPolicy{
-//     recalculate_value(q_values, tau){
-//         var tValue = util.vSquare([...tau], 0.5)
-
-//         tValue = util.vConstMul(tValue, this.kappa)
-//         return util.vAdd(eqValue, tValue)
-//     }
-// }
 
 const PolicyMode = {
     Exploration: "exploration",

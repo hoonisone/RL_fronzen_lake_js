@@ -1,3 +1,4 @@
+
 class FrozenLake{
     constructor(map_size, frozen_ratio){
         this.map_size = map_size
@@ -6,6 +7,7 @@ class FrozenLake{
         
         this.frozen_ratio = frozen_ratio
         this.map = this.generateRandomMap(this.map_size, this.frozen_ratio)
+        this.random_next_probability = 0.1
     }
 
     get_type(state){
@@ -115,6 +117,10 @@ class FrozenLake{
     }
     
     step(state, action){
+        if(Math.random() < this.random_next_probability){
+            action = util.randomChoice(this.action_list)
+        }
+
         var next_state = this.get_next_state(state, action)
         if(this.get_type(next_state) == "H"){
             next_state = 0
@@ -149,6 +155,8 @@ class FrozenLake{
         if (this.is_out(next_x, next_y)){
             return state
         }else{
+            if(this.map[next_y][next_x] == "H")
+                return state
             return this.coordinate_to_state(next_x, next_y)
         }
     }

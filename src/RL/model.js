@@ -1,3 +1,5 @@
+// const { AsyncDependenciesBlock } = require("webpack")/
+
 class ShortTermSampleModel{
     constructor(max_buffer_size = 10){
         this.buffer = []
@@ -15,10 +17,11 @@ class ShortTermSampleModel{
 }
 
 class LongTermDistributionModel{
-    static MIN_STD = 0.01
-    constructor(mean, variance, min_step_size = 0.01){
-        this.mean = 0
-        this.variance = 1
+    static MIN_STD = 0.0000001
+    constructor(mean=0, variance=1, min_step_size = 0.03){
+        this.mean = mean
+        this.variance = variance
+        console.log("AdaptableModel",this.mean, this.variance)
         this.size = 0
         this.min_step_size = min_step_size
     }
@@ -40,9 +43,11 @@ class LongTermDistributionModel{
 }
 
 class AdaptableModel{
-    constructor(mean=0, variance=1, forget_ratio=0.5, buffer_size=10, z_threshold = 2.5){ // 2.33
+    constructor(temp, mean=0, variance=1, forget_ratio=0.5, buffer_size=10, z_threshold = 2.33){ // 2.33
+        
         this.ltdm = new LongTermDistributionModel(mean, variance)
         this.stsm = new ShortTermSampleModel(buffer_size)
+        this.stsm_planning = new ShortTermSampleModel(buffer_size)
         this.forget_ratio = forget_ratio
         this.z_threshold = z_threshold // 2.33 = p_value 0.01
     }
@@ -51,18 +56,30 @@ class AdaptableModel{
         var changed = this.check_distribution_change()
         if(changed){
             this.ltdm.forget(this.forget_ratio)
+            console.log("forget")
         }
         var front = this.stsm.update(sample)
         if(front != null){
             this.ltdm.update(front)
         }
-
         return changed
     }
 
+    update_planning(){
+        var changed = this.check_distribution_change()
+        if(changed){
+            this.ltdm.forget(this.forget_ratio)
+            console.log("forget")
+        }
+        var front = this.stsm.update(sample)
+        if(front != null){
+            this.ltdm.update(front)
+        }
+        return changed
+    }
     update_ltdm_directly(sample){
         this.ltdm.update(sample)
-    }
+    } 
 
     check_distribution_change(){
         var sample_mean = this.stsm.get_sample()
@@ -71,6 +88,14 @@ class AdaptableModel{
         }
         var z = Math.abs(this.ltdm.get_z(sample_mean))
         return this.z_threshold < z
+    }
+    get step_size(){
+        
+        return this.ltdm.min_step_size
+    }
+    set step_size(value){
+        console.log("step_size: ", value)
+        this.ltdm.step_size = value
     }
 
     get mean(){
@@ -174,7 +199,7 @@ class GausianModel{
 class ModelFactory{
     static make(adaptable){
         if(adaptable){
-            return new AdaptableModel({mean:0, variance:1, forget_ratio:0.8, buffer_sizeL:10})
+            return new AdaptableModel({mean:0, variance:1, forget_ratio:0.5, buffer_size:10})
         }
         else{
             return new GausianModel(0, 1, 0.03, true)
@@ -340,7 +365,7 @@ class StateActionValueModel{
 class StateActionRewardModel{
 
     constructor(states, actions, mean, variance, step_size, no_variance = false){
-        this.max_size = 500
+        this.max_size = 10000
         this.samples = []
         
         this.mean = mean
@@ -381,18 +406,27 @@ class StateActionRewardModel{
         // for(var action=0 ; action<actions.length ; action++){
         //     this.reward_model_table[next_state][action] = new GausianModel(this.mean, this.variance, this.update_ratio, this.no_variance)
         // }
-        var new_samples = []
-        for(var i=this.samples.length-1 ; i>=0 ; i--){
+        // var new_samples = []
+        // for(var i=this.samples.length-1 ; i>=0 ; i--){
+        //     var _state, _action, _next_state, finished
+        //     [_state, _action, next_state, finished] = this.samples[i]
+        //     if((state != _state || action != _action) && (state != _next_state)){
+        //         new_samples.push(this.samples[i])
+        //     }
+        //     // this.reward_model_table[state][action].mean = 0
+        //     // this.reward_model_table[state][action].variance = 0
+        // }
+        // this.samples = new_samples
+
+        for(var i=0 ; i<this.samples.length ; i++){
             var _state, _action, _next_state, finished
             [_state, _action, next_state, finished] = this.samples[i]
-            if((state != _state || action != _action) && (state != _next_state)){
-                new_samples.push(this.samples[i])
+            if(_state == state && _action == action){
+                if(Math.random() < 0.5)
+                    this.samples.splice(i, 1)
             }
-            // this.reward_model_table[state][action].mean = 0
-            // this.reward_model_table[state][action].variance = 0
         }
-        console.log("Deleted", this.samples.length - new_samples.length)
-        this.samples = new_samples
+
     }
 
     update(state, action, reward, next_state, finished){
@@ -400,7 +434,7 @@ class StateActionRewardModel{
         if (this.max_size < this.samples.length){
             this.samples.shift()
         }
-        this.samples.push([state, action, next_state, finished])
+        this.samples.push([state, action, reward, next_state, finished])
     }
 
     p_value(state, action, reward){
@@ -411,9 +445,14 @@ class StateActionRewardModel{
         if(this.samples.length == 0){
             return null
         }
+        
+        var idx = Math.floor(Math.random()*this.samples.length)
         var state, action, reward, next_state, finished
-        [state, action, next_state, finished] = util.randomChoice(this.samples)
-        reward = this.reward_model_table[state][action].get_value()
+        [state, action, reward, next_state, finished] = this.samples[idx]
+        // if(Math.random() < 0.0001){
+        //     this.samples.splice(idx, 1)
+        // }
+        // reward = this.reward_model_table[state][action].get_value()/
         return [state, action, reward, next_state, finished]
     }
 
@@ -551,7 +590,7 @@ class ValueManager{
     }
 
     reset(state, action, next_state){
-        this.value_table.reset(state, action, next_state)
+        // this.value_table.reset(state, action, next_state)
         this.reward_model.reset(state, action, next_state)
     }
 

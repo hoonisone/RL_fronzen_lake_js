@@ -9,6 +9,12 @@ class list_util{
     }
 }
 
+class math_util{
+    static floor(x, n){
+        var e = (10**n)
+        return Math.floor(x*e)/e
+    }
+}
 class util{
     array_functions = []
     static argMax(array, all=false) {

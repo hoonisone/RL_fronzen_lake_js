@@ -419,22 +419,26 @@ class MainControllerView{
     }
 }
 
-
-
 class PolicyControllerView{
     constructor(name){
         this.element = document.createElement("div");
         this.element.className = "module"
         this.element.innerHTML = `
-            <div><label><b>${name}</b></label></div>
+            <label><b>${name}</b></label>
+            <hbox class="epsilon"></hbox>
+            <hbox class="kappa"></hbox>
         `
-        this.sliderListDom = new SliderListObject(["Epsilon", "Kappa"])
-        this.buttonDom = new ButtonObject("Change")
-        
+        this.epsilon_slider = new SliderObject("epsilon")
+        this.epsilon_check_box = new CheckBox("auto")
+        this.kappa_slider = new SliderObject("epsilon")
+        this.kappa_check_box = new CheckBox("auto")
 
-        this.element.appendChild(this.sliderListDom.getElement())        
-        this.element.appendChild(this.buttonDom.getElement())
+        this.element.getElementsByClassName("epsilon")[0].appendChild(this.epsilon_slider.getElement())
+        this.element.getElementsByClassName("epsilon")[0].appendChild(this.epsilon_check_box.getElement())
+        this.element.getElementsByClassName("kappa")[0].appendChild(this.kappa_slider.getElement())
+        this.element.getElementsByClassName("kappa")[0].appendChild(this.kappa_check_box.getElement())
     }
+
     getElement(){
         return this.element
     }

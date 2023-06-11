@@ -189,5 +189,6 @@ class SliderObject{
     }
     set value(v){
         this._value.innerHTML = v
+        this.slider.value = v
     }
 }

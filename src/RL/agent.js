@@ -105,7 +105,7 @@ class Agent{
         this.use_oblivion = false
 
         // Policy
-        this.policy = new AdaptablePolicy(0, 0)
+        this.policy = new Policy(0, 0)
         
         var q_value_manager_args = {
             q_value_mean : 0,
@@ -116,7 +116,7 @@ class Agent{
             reward_mean : 0,
             reward_variance : 0,
             reward_step_size : 0.5,
-            planning_num : 100,
+            planning_num : 1000,
         }
         this.q_manager = new ValueManager(states, actions, q_value_manager_args)
         this.q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
@@ -189,10 +189,17 @@ class Agent{
     }
 
     step(reward, state, finished){
+        
         reward += this.default_reward
-        var distribution_changed = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
- 
-        if(this.use_oblivion && distribution_changed == true){
+        var env_changed = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
+        if(state == this.past_state){
+            if(Math.random() < 0.1){
+                env_changed = true
+            }
+
+        }
+        this.policy.update_parameter(env_changed)
+        if(this.use_oblivion && env_changed == true){
             this.q_manager.reset(this.past_state, this.past_action, state)   
         }    
 
