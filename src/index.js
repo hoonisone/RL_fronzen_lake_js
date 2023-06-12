@@ -229,7 +229,7 @@ class ReinforcementLearningDemo{
 
 
 
-operator = new ReinforcementLearningDemo(20, 1, 0.7)
+operator = new ReinforcementLearningDemo(10, 1, 0.7)
 document.body.appendChild(operator.getElement())
 
 

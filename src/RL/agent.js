@@ -107,18 +107,19 @@ class Agent{
         // Policy
         this.policy = new Policy(0, 0)
         
-        var q_value_manager_args = {
-            q_value_mean : 0,
-            q_value_variance : 1,
-            q_value_step_size : 0.3,
+        // var q_value_manager_args = {
+        //     q_value_mean : 0,
+        //     q_value_variance : 1,
+        //     q_value_step_size : 0.3,
 
-            discounting_factor : 0.95,
-            reward_mean : 0,
-            reward_variance : 0,
-            reward_step_size : 0.5,
-            planning_num : 1000,
-        }
-        this.q_manager = new ValueManager(states, actions, q_value_manager_args)
+        //     discounting_factor : 0.95,
+        //     reward_mean : 0,
+        //     reward_variance : 0,
+        //     reward_step_size : 0.5,
+        //     planning_num : 1000,
+        // }
+        // this.q_manager = new ValueManager(states, actions, q_value_manager_args)
+        this.q_manager = new ActionStateValueModelTable(states, actions)
         this.q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
 
         this.tau_value_table = new ActionTauTable(states, actions)
