@@ -430,7 +430,7 @@ class PolicyControllerView{
         `
         this.epsilon_slider = new SliderObject("epsilon")
         this.epsilon_check_box = new CheckBox("auto")
-        this.kappa_slider = new SliderObject("epsilon")
+        this.kappa_slider = new SliderObject("kappa")
         this.kappa_check_box = new CheckBox("auto")
 
         this.element.getElementsByClassName("epsilon")[0].appendChild(this.epsilon_slider.getElement())

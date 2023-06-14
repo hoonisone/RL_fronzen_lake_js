@@ -25,16 +25,16 @@ class PolicyParameterManager{
         // epsilon
 
         this.min_epsilon = 0.01
-        this.max_epsilon = 0.15
+        this.max_epsilon = 0.30
         this._epsilon = initial_epsilon
 
         // kappa
 
-        this.max_kappa = 0.001
+        this.max_kappa = 0.01
         this.min_kappa = 0.0001
         this._kappa = initial_kappa
 
-        this.env_change_checker = new EnvChangeRatioChecker(300)
+        this.env_change_checker = new EnvChangeRatioChecker(100)
     }
 
     update(env_changed){

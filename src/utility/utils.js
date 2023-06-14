@@ -72,6 +72,26 @@ class random_util{
         return items[index];
     }
 }
+
+class tensor_util{
+    static object_ndarray(dims, generator){
+        if (dims.length == 1){
+            var arr = Array(dims[0]);
+            for(var i=0 ; i<arr.length ; i++){
+                arr[i] = generator()
+            }
+            return arr
+        }
+        else{
+            var arr = []
+            for(var i=0 ; i<dims[0] ; i++){
+                arr.push(tensor_util.object_ndarray(dims.slice(1), generator));
+            }
+            return arr;
+        }
+    }
+}
+
 class util{
     array_functions = []
     static argMax(array, all=false) {
@@ -115,6 +135,22 @@ class util{
             for(var i=0 ; i<dims[0] ; i++){
                 arr.push(util.ones(dims.slice(1)));
                 // arr.push(util.array(args.slice(1)));
+            }
+            return arr;
+        }
+    }
+    static object_ndarray(dims, generator){
+        if (dims.length == 1){
+            var arr = Array(dims[0]);
+            for(var i=0 ; i<arr.length ; i++){
+                arr[i] = generator()
+            }
+            return arr
+        }
+        else{
+            var arr = []
+            for(var i=0 ; i<dims[0] ; i++){
+                arr.push(object_ndarray(dims.slice(1), generator));
             }
             return arr;
         }

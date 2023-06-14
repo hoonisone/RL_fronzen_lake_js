@@ -26,6 +26,7 @@ class ReinforcementLearningDemo{
                 <div class="information_view"></div>
                 <div class="cell_information_view"></div>
             </hbox>
+            <div class="episode_step_chart_view"></div>
         `
         this.selected_cell = -1
         this.selected_agent_idx = 0
@@ -51,7 +52,13 @@ class ReinforcementLearningDemo{
         this.informationViewer = new InformationViewer();
         this.element.getElementsByClassName("information_view")[0].appendChild(this.informationViewer.getElement())
 
+        this.episode_step_chart_view = new LineChart("Episode", "Step")
+        this.element.getElementsByClassName("episode_step_chart_view")[0].appendChild(this.episode_step_chart_view.getElement())
+        // document.body.appendChild(chart.element)
+        
+
         this.env = new FrozenLake(map_size, frozen_ratio)
+        this.env = new ChangingFrozenLake1()
         
         this.agent = new Agent(this.env.getStates(), this.env.getActions())
         this.agent.goal_callback.add(() => this.informationViewer.goal += 1)
@@ -73,6 +80,7 @@ class ReinforcementLearningDemo{
         this.buttonListDom.objects["New Map"].OnClickCallback.add(() => {
             this.env.new_map()
             this.grid_env_view.setStateMap(this.env.getMap())
+            
         })
         this.buttonListDom.objects["Reset Value"].OnClickCallback.add(() => {
             this.get_selected_agent().reset_all_value()
@@ -87,7 +95,7 @@ class ReinforcementLearningDemo{
 
 
         this.controller_view.main_controller_view.sliderListDom.objects["Speed"].OnInputCallback.add((value) => this.speed = (1000**(1-value)))
-        this.controller_view.main_controller_view.checkBoxListDom.objects["use_oblivion"].onChangedCallBack.add((checked) => {this.agent.use_oblivion = checked})
+        this.controller_view.main_controller_view.checkBoxListDom.objects["use_oblivion"].onChangedCallBack.add((checked) => {this.agent.use_forget = checked})
 
 
         this.controller_view.policy_controller_view.epsilon_slider.OnInputCallback.add((value) => this.agent.epsilon = value)
@@ -103,10 +111,10 @@ class ReinforcementLearningDemo{
         this.grid_env_view.ctrl_click_callback.add((x, y) => this.change_map_cell(x, y))
         this.grid_env_view.onDoubleClickCallback.add((x, y) => this.change_map_cell(x, y))
         this.grid_env_view.click_callback.add((x, y) => {this.selected_cell = this.env.coordinate_to_state(x, y)})
-        this.grid_env_view.setStateMap(this.env.getMap())
+        // this.grid_env_view.setStateMap(this.env.getMap())
         // this.env_view.setValueMap(this.agentGroup.agents[0].policy.getStateValueMap())
-        this.grid_env_view.setRewardMap(this.env.getRewardMap())
-
+        // this.grid_env_view.setRewardMap(this.env.getRewardMap())
+        this.update_map_view()
     }
     change_map_cell(x, y){
         var state = this.env.coordinate_to_state(x, y)
@@ -119,15 +127,21 @@ class ReinforcementLearningDemo{
         }
         // this.env_view.setArrowsMap(this.agentGroup)/
     }
+
+    update_map_view(){
+        this.grid_env_view.setStateMap(this.env.getMap())
+        this.grid_env_view.setRewardMap(this.env.getRewardMap())
+    }
     
     update_grid_env_view_cell_value(state){
         var x, y
         [x, y] = this.env.state_to_coordinate(state)
         var state_value = this.agent.get_state_value(state)
-        var action_value = this.agent.get_q_values_for_state(state)
+        var action_value = this.agent.get_action_values_for_state(state)
         this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
         this.grid_env_view.setArrows(x, y, action_value)
     }
+    
     update_grid_env_view_call_value_all(){
         for(var state of this.env.state_list){
             this.update_grid_env_view_cell_value(state)
@@ -201,13 +215,16 @@ class ReinforcementLearningDemo{
 
     async one_episode(){
         this.initAgent()
+        var step = 0
         while(true){
             var end = this.one_step()
+            step += 1
             if(end){
                 break;
             }
             await wait(this.speed)
         }
+        return step
     }
 
     async infinite_step(){
@@ -218,18 +235,19 @@ class ReinforcementLearningDemo{
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-operator = new ReinforcementLearningDemo(10, 1, 0.7)
+var operator = new ReinforcementLearningDemo(5, 1, 0.7)
 document.body.appendChild(operator.getElement())
+async function experiment(){
+    for(var i=0 ; i<7 ; i++){
+        for(var j=0 ; j<30 ; j++){
+            var step_num = await operator.one_episode()
+            operator.episode_step_chart_view.add(step_num)
+            operator.episode_step_chart_view.update()
+        }
+        operator.env.next_map()
+        operator.update_map_view()
+        
+    }
+}
 
-
+experiment()

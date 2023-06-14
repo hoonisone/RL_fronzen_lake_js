@@ -89,7 +89,7 @@ class AgentGrupe{
 class Agent{
     constructor(states, actions){
         // reward
-        this.default_reward = -0.01
+        this.default_reward = -0.03
         this.curiosity_reward = 0.001
         this.repeat_penalty = -0.01
 
@@ -101,8 +101,6 @@ class Agent{
         this.past_action = null
         
         this.finished = true
-
-        this.use_oblivion = false
 
         // Policy
         this.policy = new Policy(0, 0)
@@ -119,8 +117,8 @@ class Agent{
         //     planning_num : 1000,
         // }
         // this.q_manager = new ValueManager(states, actions, q_value_manager_args)
-        this.q_manager = new ActionStateValueModelTable(states, actions)
-        this.q_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
+        this.action_state_value_manager = new ActionStateValueModelTable(states, actions)
+        this.action_state_value_manager.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
 
         this.tau_value_table = new ActionTauTable(states, actions)
 
@@ -133,6 +131,10 @@ class Agent{
         this.first_state_action = new Callback_2()
         this.total_step = 0
 
+    }
+
+    set use_forget(value){
+        this.action_state_value_manager.use_forget = value
     }
     
     set epsilon(value){
@@ -149,20 +151,20 @@ class Agent{
         return this.policy.kappa
     }
     set gamma(value){
-        this.q_manager.gamma = value
+        this.action_state_value_manager.gamma = value
     }
     get gamma(){
-        return this.q_manager.gamma
+        return this.action_state_value_manager.gamma
     }
     set step_size(value){
-        this.q_manager.step_size = value
+        this.action_state_value_manager.step_size = value
     }
     get step_size(){
-        return this.q_manager.step_size
+        return this.action_state_value_manager.step_size
     }
 
     get_state_e_value(state){
-        return this.eq_manager.getStateValue(state) 
+        return this.action_state_value_manager.getStateValue(state) 
     }
 
     reset_all(){
@@ -171,11 +173,11 @@ class Agent{
     }
 
     reset_all_value(){
-        this.q_manager.reset_all_value()
+        this.action_state_value_manager.reset_all_value()
     }
 
     reset_all_model(){
-        this.q_manager.reset_all_model()
+        this.action_state_value_manager.reset_all_model()
     }
 
     set_group(group){
@@ -192,19 +194,21 @@ class Agent{
     step(reward, state, finished){
         
         reward += this.default_reward
-        var env_changed = this.q_manager.update(this.past_state, this.past_action, reward, state, finished)
+        var env_changed = this.action_state_value_manager.update(this.past_state, this.past_action, reward, state, finished)
+        if(env_changed){
+            console.log("env_changed")
+        }
+        console.log(env_changed)
+
         if(state == this.past_state){
             if(Math.random() < 0.1){
                 env_changed = true
             }
 
         }
-        this.policy.update_parameter(env_changed)
-        if(this.use_oblivion && env_changed == true){
-            this.q_manager.reset(this.past_state, this.past_action, state)   
-        }    
+        this.policy.update_parameter(env_changed) 
 
-        this.q_manager.planning()
+        this.action_state_value_manager.planning()
 
         this.past_state = state
         this.past_action = this.choose_action(this.past_state)
@@ -229,7 +233,7 @@ class Agent{
     }
 
     get_q_values_for_state(state){
-        return this.q_manager.get_values_for_state(state)
+        return this.action_state_value_manager.get_values_for_state(state)
     }
     get_tau_values_for_state(state){
         return this.tau_value_table.value_table[state]

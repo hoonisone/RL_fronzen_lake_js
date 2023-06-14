@@ -1,4 +1,3 @@
-
 class FrozenLake{
     constructor(map_size, frozen_ratio){
         this.map_size = map_size
@@ -135,7 +134,6 @@ class FrozenLake{
         let x, y
         [x, y] = this.state_to_coordinate(state)
         return (this.map[y][x] == "G")
-        // return (this.map[y][x] == "G") || (this.map[y][x] == "H")
     }
         
     
@@ -193,18 +191,62 @@ class FrozenLake{
 }
 
 
+class ChangingFrozenLake1 extends FrozenLake{
+    constructor(){
+        super(5, 1)
+        this.map_list = [
+        [["S", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "G"]],
 
-// x = new EnvChangeRatioChecker()
-// for(var i=0 ; i<1000 ; i++){
-//     x.update(false)
-//     console.log("ratio: ", x.get_ratio())
-// }
+        [["S", "F", "H", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["H", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "G"]],
 
-// for(var i=0 ; i<100 ; i++){
-//     x.update(true)
-//     console.log("ratio: ", x.get_ratio())
-// }
-// for(var i=0 ; i<100 ; i++){
-//     x.update(false)
-//     console.log("ratio: ", x.get_ratio())
-// }
+        [["S", "F", "F", "F", "F"],
+         ["F", "F", "H", "F", "F"],
+         ["F", "H", "H", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "G"]],
+        
+        [["S", "F", "F", "H", "F"],
+         ["F", "F", "F", "H", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["H", "H", "F", "F", "F"],
+         ["F", "F", "F", "F", "G"]],
+        
+        [["S", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "H", "H", "H", "F"],
+         ["F", "F", "F", "F", "F"],
+         ["F", "F", "F", "F", "G"]],
+        
+        [["S", "F", "F", "F", "F"],
+         ["F", "F", "H", "F", "F"],
+         ["F", "F", "H", "F", "F"],
+         ["F", "F", "H", "F", "F"],
+         ["F", "F", "F", "F", "G"]],
+        
+        [["S", "F", "F", "F", "F"],
+         ["F", "F", "F", "H", "F"],
+         ["F", "F", "H", "F", "F"],
+         ["F", "H", "F", "F", "F"],
+         ["F", "F", "F", "F", "G"]]]
+
+        this.map_idx = 0
+        this.map = this.map_list[this.map_idx]
+    }
+
+    next_map(){
+        this.map_idx += 1
+        if(this.map_idx == this.map_list.length){
+            return false
+        }
+        this.map = this.map_list[this.map_idx]
+        return true
+    }
+}

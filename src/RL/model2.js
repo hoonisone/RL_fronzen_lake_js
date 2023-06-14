@@ -18,7 +18,7 @@ class ActionTauTable{
 
 class GaussianDistributionModel{
     static MIN_STD = 0.0000001
-    constructor({mean=0, variance=1, min_step_size = 0.1}){
+    constructor({mean=0, variance=1, min_step_size = 0.05}){
         this.mean = mean
         this.variance = variance
         this.min_step_size = min_step_size
@@ -109,6 +109,20 @@ class RewardStateModel{
         return this.state_to_reward_model[next_state].mean
     }
 
+    get_reward_finished_sample_with_next_state(next_state){
+        if(!(next_state in this.state_to_reward_model)){
+            return null
+        }
+        var f = false
+        for(var [ns, _f] of this.sample_buffer){
+            if(ns == next_state){
+                f = _f
+                break
+            }
+        }
+        return [this.state_to_reward_model[next_state].mean, f]
+    }
+
     get size(){return this.sample_buffer.length}
 
     forget(forget_ratio){
@@ -196,6 +210,20 @@ class SeparableRewardStateModel{
         return [type, reward]
     }
 
+    get_reward_finished_sample_with_next_state(next_step){
+        if(this.is_empty()){
+            return [null, [null, null]]
+        }
+        var recent_ratio = this.recent_size/this.size
+        var recent = (Math.random() <= recent_ratio)
+        var type = recent?"recent":"old"
+        var [reward, finished] = (recent? this.recent_sample_model : this.old_sample_model).get_reward_finished_sample_with_next_state(next_step)
+        if(recent == null){
+            return [null, [null, null]]
+        }
+        return [type, [reward, finished]]
+    }
+
     forget_recent_samples(forget_ratio){
         this.recent_sample_model.forget(forget_ratio)
     }
@@ -208,319 +236,302 @@ class SeparableRewardStateModel{
     }
 }
 
-class ActionStateValueModel{
-    constructor({recent_buffer_size=10, old_buffer_size=100}){
-        this.value = new GaussianDistributionModel({mean:0, variance:1, min_step_size:0.03})
-
-        this.recent_value_distribution_model = new GaussianDistributionModel({mean:0, variance:1, min_step_size:0.1})
-        this.old_value_distribution_model  = new GaussianDistributionModel({mean:0, variance:1, min_step_size:0.01})
-
-        this.sample_model = new SeparableRewardStateModel({recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})
-        
-        this.smd_threshold = 0.1
-        this.sampling_num = 0
-        this.forget_ratio = 0.8
-    }
-    update_model(reward, next_state, finished){
-        this.sample_model.update(reward, next_state, finished)
-    }
-
-    get_reward_next_state_finished_sample(){
-        return this.sample_model.get_reward_next_state_finished_sample()
-    }
-
-    get_reward_sample(next_step){
-        return this.sample_model.get_reward_sample(next_step)
-    }
-
-    get_all_next_states(){
-        return this.sample_model.get_all_next_states()
-    }
-
-    update_value(value, type="recent"){ // type: "recent", "old"
-        
-        var model_difference = this.check_model_difference()
-        // console.log("model_difference: ", model_difference)
-        if(2.3 < model_difference){
-            this.forget_old(1)
-            console.log("forget 1")
-        }else if(2 < model_difference){
-            this.forget_old(0.8)
-            console.log("forget 0.8")
-        }else if(1 < model_difference){
-            this.forget_old(1)
-            console.log("forget 0.5")
-        }
-
-        this.value.update(value)
-        if(this.sample_model.is_separable()){
-            switch(type){
-            case "recent":
-                this.recent_value_distribution_model.update(value)
-                break;
-            case "old":
-                this.old_value_distribution_model.update(value)
-                break;
-            }
-        }
-
-        return 1 < model_difference
-    }
-    
-    forget_old(forget_ratio){
-        this.sample_model.forget_old_samples(forget_ratio)
-        this.old_value_distribution_model.forget(1)
-    }
-
-    is_distribution_comparable(){ // 둘 다 어느정도 사이즈를 갖추었는가?
-        return (this.recent_value_distribution_model.size > 10) && (this.old_value_distribution_model.size > 10)
-    }
-
-    
-    check_model_difference(){
-        if(this.is_distribution_comparable()){
-            var recent_mean = this.recent_value_distribution_model.mean
-            var recent_varance = this.recent_value_distribution_model.variance
-            var old_mean = this.old_value_distribution_model.mean
-            var old_variance = this.old_value_distribution_model.variance
-
-            var recent_z = Math.abs(recent_mean-old_mean)/(old_variance**0.5)
-            var old_z = Math.abs(old_mean-recent_mean)/(recent_varance**0.5)
-
-            return Math.min(recent_z, old_z)
-        }
-        return false
-    }
-    get_print(){
-        return `
-        value: ${this.value.mean}
-        recent_size:${this.sample_model.recent_size}
-        old_size:${this.sample_model.old_size}
-        recent_mean:${this.recent_value_distribution_model.mean}
-        old_mean:${this.old_value_distribution_model.mean}
-        `
+class ObjectTable{
+    constructor({height, width, object_generator}){
+        this.table = tensor_util.object_ndarray([height, width], object_generator)
     }
 }
 
-class ActionStateValueModelTable{
-    constructor(states, actions){        
-        this.state_num = states.length
-        this.action_num = actions.length
+class StateActionValue extends ObjectTable{
+    constructor({state_num, action_num, mean=0, variance=1, min_step_size=0.05}){
+        super({height:state_num, 
+               width:action_num, 
+               object_generator:() => new GaussianDistributionModel({mean:mean, variance:variance, min_step_size:min_step_size})})
+    }
 
-        this.table = this.create_action_state_model_table(this.state_num, this.action_num)
+    update(state, action, value){
+        this.table[state][action].update(value)
+    }
 
-        this.gamma = 0.99
-        this.planning_num = 1000
+    get_value(state, action){
+        return this.table[state][action].mean
+    }
 
-        this.after_action_value_update_callback = new Callback_2()
+    get_size(state, action){
+        return this.table[state][action].size
+    }
+}
 
-        this.heap = new Heap()
-        this.planning_value_threshold = 0.05
-        this.dict = {}
-
+class StateActionModel extends ObjectTable{
+    constructor({state_num, action_num, recent_buffer_size=10, old_buffer_size=100}){
+        super({height:state_num, 
+               width:action_num, 
+               object_generator:() => new SeparableRewardStateModel({recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})})
         this.recent_visit = []
+        this.state_to_pre_state_action = {}
     }
 
-    create_action_state_model_table(height, width){
-        var table = util.ndarray([height, width], 0)
-        for(var y=0 ; y<height ; y++){
-            for(var x=0 ; x<width ; x++){
-                table[y][x] = new ActionStateValueModel({recent_buffer_size:5, old_buffer_size:100})
-            }
+    update(state, action, reward, next_state, finished){
+        this.recent_visit.unshift([state, action])
+
+        this.table[state][action].update(reward, next_state, finished)
+
+        if(!(next_state in this.state_to_pre_state_action)){
+            this.state_to_pre_state_action[next_state] = new Set()
         }
-        return table
+        this.state_to_pre_state_action[next_state].add(JSON.stringify([state, action]))
     }
 
-    update_value(s, a, r, ns, f){ // state, action, reward, next state, finished
-        var value = this.bootstrap_value(r, ns, f)
-        
-        var p = Math.abs(value- this.table[s][a].value.mean)
-        if(this.planning_value_threshold <p) {
-            this.heap.push([p, s, a])
+    get_sample(){
+        var[state, action] = random_util.randomChoice(this.recent_visit)
+        return this.get_sample_with_state_action(state, action)
+    }
+
+    get_sample_with_state_action(state, action){
+        this.table[state][action].get_reward_next_state_finished_sample()
+
+        var [type, [reward, next_state, finished]] = this.table[state][action].get_reward_next_state_finished_sample()
+        if(type == null){
+            return [null, [null, null, null, null, null]]
         }
-
-        var env_change = this.table[s][a].update_value(value, "recent")
-        if(env_change){
-            var next_states = this.table[s][a].get_all_next_states()
-            for(var next_state of next_states){
-                delete this.dict[next_state]
-            }
-        }
-
-        this.after_action_value_update_callback.invoke(s, a)
-
-        this.recent_visit.unshift([s, a])
-        if(10000 < this.recent_visit){
-            this.recent_visit.pop()
-        }
+        return [type, [state, action, reward, next_state, finished]]
     }
 
-    bootstrap_value(r, ns, f){ // reward, next step, finished
-        var next_return = (f == true) ? 0 : Math.max(...this.get_values_for_state(ns))    
-        var cur_return = r + this.gamma*next_return
-        return cur_return
-    }
-
-    update_model(s, a, r, ns, f){
-        this.table[s][a].update_model(r, ns, f)
-    }
-
-    update(s, a, r, ns, f){
-        if(!(ns in this.dict)){
-            this.dict[ns] = new Set()
-        }
-        this.dict[ns].add(JSON.stringify([s, a]))
-        this.update_value(s, a, r, ns, f)
-        this.update_model(s, a, r, ns, f)
-    }
-
-    pq_planning(){
-        var visited = new Set()
-        while(!this.heap.is_empty()){
-
-            
-            var [_, state, action] = this.heap.pop()
-            var [type, [reward, next_state, finished]] = this.table[state][action].get_reward_next_state_finished_sample()
+    get_all_samples_with_next_state(next_state){
+        var arr = []
+        for(var [state, action] of this.state_to_pre_state_action[next_state]){
+            var [type, [reward, finished]] = this.table[state][action].get_reward_finished_sample_with_next_state(next_state)
             if(type == null){
                 continue
             }
-
-            visited.add(`${[state, action]}`)
-
-            var value = this.bootstrap_value(reward, next_state, finished)
-            this.table[state][action].update_value(value, type)
-            this.after_action_value_update_callback.invoke(state, action)
-
-            next_state = state
-            if(!(next_state in this.dict))
-                continue
-            for(var x of this.dict[next_state]){
-                var [ps, pa] = JSON.parse(x)
-                if(visited.has(`${[ps, pa]}`)){
-                    continue
-                }else{
-                }
-                var [__, r] = this.table[ps][pa].get_reward_sample(next_state)
-                if(r == null){
-                    continue
-                }
-                value = this.bootstrap_value(r, next_state, finished)
-                var p = Math.abs(value - this.table[ps][pa].value.mean)
-                if(this.planning_value_threshold <= p){
-                    this.heap.push([p, ps, pa])
-                }
-            }
+            arr.push([type, [state, action, reward, next_state, finished]])
         }
-
+        return arr
     }
 
-    planning(){
-        this.pq_planning()
-        for(var i=0 ; i<this.planning_num ; i++){
-            var[s, a] = random_util.randomChoice(this.recent_visit)
-            var [type, [reward, next_state, finished]] = this.table[s][a].get_reward_next_state_finished_sample()
-            if(reward == null){
+    
+    // forget_visit_list_by_state(state){
+    //     var new_list = []
+    //     for(var visit of this.recent_visit){
+    //         if(visit[0] == state){
+    //             continue
+    //         }
+    //         new_list.unshift()
+    //     }
+    //     this.recent_visit = new_list
+    // }
+
+    forget_visit_list_by_state_action(state, action){
+        var new_list = []
+        for(var visit of this.recent_visit){
+            if(visit[0] == state && visit[1] == action){
                 continue
             }
-
-            var value = this.bootstrap_value(reward, next_state, finished)
-            this.table[s][a].update_value(value, type)
-            
-            this.after_action_value_update_callback.invoke(s, a)
+            new_list.unshift()
         }
+        this.recent_visit = new_list
     }
 
-    getValueMap(){
-        let valueMap = []
-        for(var state of this.states){
-            var q_values  = this.get_values_for_state(state)            
-            var max_q_value = Math.max(...q_values)
-            valueMap.push(Math.floor(max_q_value*100)/100)
-        }
-        return valueMap
+    // forget_by_state(state, forget_ratio){
+    //     this.forget_visit_list_by_state(state)
+    //     for(var model of this.table[state]){
+    //         model.forget_old_samples(forget_ratio)
+    //     }
+    // }
+
+    forget_by_state_action(state, action, forget_ratio){
+        // this.forget_visit_list_by_state_action(state, action)
+        this.table[state][action].forget_old_samples(forget_ratio) // 다음으로 전이 되는 정보 삭제
+        this.forget_pre_state_action_by_state(state, action) // 이전에서 전이되는 정보 삭제
     }
 
-    get_values_for_state(state){
-        var qValues  = []
-        // console.log(state)
-        // console.log(this.table[state])
-        for(var x of this.table[state]){
-            qValues.push(x.value.mean)
+    forget_pre_state_action_by_state(state, action){
+        var next_states = this.table[state][action].get_all_next_states()
+        for(var next_state of next_states){
+            this.state_to_pre_state_action[next_state].delete(JSON.stringify([state, action]))
         }
-        return qValues
     }
-
 }
 
+//  
+// class ActionStateValueModelTable{
+//     constructor(states, actions){        
+//         this.state_num = states.length
+//         this.action_num = actions.length
 
+//         this.table = this.create_action_state_model_table(this.state_num, this.action_num)
 
-// var m = new AdaptableValueManager({recent_buffer_size:5, old_buffer_size:100})
+//         this.gamma = 0.99
+//         this.planning_num = 1000
 
-// function gaussianRandom() {
-//     var v1, v2, s;
-  
-//     do {
-//       v1 = 2 * Math.random() - 1;   // -1.0 ~ 1.0 까지의 값
-//       v2 = 2 * Math.random() - 1;   // -1.0 ~ 1.0 까지의 값
-//       s = v1 * v1 + v2 * v2;
-//     } while (s >= 1 || s == 0);
-  
-//     s = Math.sqrt( (-2 * Math.log(s)) / s );
-  
-//     return v1 * s;
-// }
+//         this.after_action_value_update_callback = new Callback_2()
 
-// for(var i=0 ; i<100 ; i++){
-//     var value = gaussianRandom()
-//     // console.log("value: ", value)
-//     m.update_value(value)
-//     // console.log(m.get_print())
-//     m.update_model(value)
-//     for(var j=0 ; j<30 ; j++){
-//         var type, sample
-//         [type, sample] = m.get_sample()
-//         m.update_value(sample, type)
+//         this.heap = new Heap()
+//         this.planning_value_threshold = 0.05
+//         this.dict = {}
+
+//         this.recent_visit = []
 //     }
-//     console.log(i, Math.abs(m.recent_value_distribution_model.mean-m.old_value_distribution_model.mean), m.is_distribution_comparable())
+
+//     set use_forget(value){
+//         for(var state=0 ; state<this.state_num ; state++){
+//             for(var action=0 ; action<this.action_num ; action++){
+//                 this.table[state][action].use_forget = value
+//             }
+//         }
+//     }
+
+//     create_action_state_model_table(height, width){
+//         var table = util.ndarray([height, width], 0)
+//         for(var y=0 ; y<height ; y++){
+//             for(var x=0 ; x<width ; x++){
+//                 table[y][x] = new ActionStateValueModel({recent_buffer_size:3, old_buffer_size:100})
+//             }
+//         }
+//         return table
+//     }
+
+//     update_value(s, a, r, ns, f){ // state, action, reward, next state, finished
+//         var value = this.bootstrap_value(r, ns, f)
+        
+//         var p = Math.abs(value- this.table[s][a].value.mean)
+//         if(this.planning_value_threshold <p) {
+//             this.heap.push([p, s, a])
+//         }
+
+//         var env_change = this.table[s][a].update_value(value, "recent")
+//         if(env_change){
+//             var next_states = this.table[s][a].get_all_next_states()
+//             for(var next_state of next_states){
+//                 delete this.dict[next_state]
+//             }
+//         }
+
+//         this.after_action_value_update_callback.invoke(s, a)
+
+//         this.recent_visit.unshift([s, a])
+//         if(10000 < this.recent_visit){
+//             this.recent_visit.pop()
+//         }
+//         return env_change
+//     }
+
+//     bootstrap_value(r, ns, f){ // reward, next step, finished
+//         var next_return = (f == true) ? 0 : Math.max(...this.get_values_for_state(ns))    
+//         var cur_return = r + this.gamma*next_return
+//         return cur_return
+//     }
+
+//     update_model(s, a, r, ns, f){
+//         this.table[s][a].update_model(r, ns, f)
+//     }
+
+//     update(s, a, r, ns, f){
+//         if(!(ns in this.dict)){
+//             this.dict[ns] = new Set()
+//         }
+//         this.dict[ns].add(JSON.stringify([s, a]))
+//         var env_change = this.update_value(s, a, r, ns, f)
+//         this.update_model(s, a, r, ns, f)
+
+//         return env_change
+//     }
+
+//     pq_planning(){
+//         var visited = new Set()
+//         while(!this.heap.is_empty()){
+
+            
+//             var [_, state, action] = this.heap.pop()
+//             var [type, [reward, next_state, finished]] = this.table[state][action].get_reward_next_state_finished_sample()
+//             if(type == null){
+//                 continue
+//             }
+
+//             visited.add(`${[state, action]}`)
+
+//             var value = this.bootstrap_value(reward, next_state, finished)
+//             this.table[state][action].update_value(value, type)
+//             this.after_action_value_update_callback.invoke(state, action)
+
+//             next_state = state
+//             if(!(next_state in this.dict))
+//                 continue
+//             for(var x of this.dict[next_state]){
+//                 var [ps, pa] = JSON.parse(x)
+//                 if(visited.has(`${[ps, pa]}`)){
+//                     continue
+//                 }else{
+//                 }
+//                 var [__, r] = this.table[ps][pa].get_reward_sample(next_state)
+//                 if(r == null){
+//                     continue
+//                 }
+//                 value = this.bootstrap_value(r, next_state, finished)
+//                 var p = Math.abs(value - this.table[ps][pa].value.mean)
+//                 if(this.planning_value_threshold <= p){
+//                     this.heap.push([p, ps, pa])
+//                 }
+//             }
+//         }
+
+//     }
+
+//     planning(){
+//         this.pq_planning()
+//         for(var i=0 ; i<this.planning_num ; i++){
+//             var[s, a] = random_util.randomChoice(this.recent_visit)
+//             var [type, [reward, next_state, finished]] = this.table[s][a].get_reward_next_state_finished_sample()
+//             if(reward == null){
+//                 continue
+//             }
+
+//             var value = this.bootstrap_value(reward, next_state, finished)
+//             this.table[s][a].update_value(value, type)
+            
+//             this.after_action_value_update_callback.invoke(s, a)
+//         }
+//     }
+
+//     getValueMap(){
+//         let valueMap = []
+//         for(var state of this.states){
+//             var q_values  = this.get_values_for_state(state)            
+//             var max_q_value = Math.max(...q_values)
+//             valueMap.push(Math.floor(max_q_value*100)/100)
+//         }
+//         return valueMap
+//     }
+
+//     get_values_for_state(state){
+//         var qValues  = []
+//         // console.log(state)
+//         // console.log(this.table[state])
+//         for(var x of this.table[state]){
+//             qValues.push(x.value.mean)
+//         }
+//         return qValues
+//     }
+
 // }
 
-// for(var i=0 ; i<100 ; i++){
-//     var value = gaussianRandom()+3
-//     // console.log("value: ", value)
-//     m.update_value(value)
-//     // console.log(m.get_print())
-//     m.update_model(value)
-//     for(var j=0 ; j<30 ; j++){
-//         var type, sample
-//         [type, sample] = m.get_sample()
-//         m.update_value(sample, type)
+// class StateActionModel{
+//     constructor(states, actions){        
+//         this.state_num = states.length
+//         this.action_num = actions.length
+
+//         this.table = this.create_action_state_model_table(this.state_num, this.action_num)
+
+//         this.gamma = 0.99
+//         this.planning_num = 1000
+
+//         this.after_action_value_update_callback = new Callback_2()
+
+//         this.heap = new Heap()
+//         this.planning_value_threshold = 0.05
+//         this.dict = {}
+
+//         this.recent_visit = []
 //     }
-//     console.log(i, Math.abs(m.recent_value_distribution_model.mean-m.old_value_distribution_model.mean), m.is_distribution_comparable())
 // }
 
-// for(var i=0 ; i<100 ; i++){
-//     var value = gaussianRandom()/10+3
-//     // console.log("value: ", value)
-//     m.update_value(value)
-//     // console.log(m.get_print())
-//     m.update_model(value)
-//     for(var j=0 ; j<30 ; j++){
-//         var type, sample
-//         [type, sample] = m.get_sample()
-//         m.update_value(sample, type)
-//     }
-//     console.log(i, Math.abs(m.recent_value_distribution_model.mean-m.old_value_distribution_model.mean), m.is_distribution_comparable())
-// }
-// for(var i=0 ; i<100 ; i++){
-//     var value = gaussianRandom()/10+3.3
-//     // console.log("value: ", value)
-//     m.update_value(value)
-//     // console.log(m.get_print())
-//     m.update_model(value)
-//     for(var j=0 ; j<30 ; j++){
-//         var type, sample
-//         [type, sample] = m.get_sample()
-//         m.update_value(sample, type)
-//     }
-//     console.log(i, Math.abs(m.recent_value_distribution_model.mean-m.old_value_distribution_model.mean), m.is_distribution_comparable())
-// }
