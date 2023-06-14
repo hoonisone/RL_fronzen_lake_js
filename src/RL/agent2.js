@@ -105,20 +105,9 @@ class Agent{
         this.finished = true
 
         // Policy
-        this.policy = new Policy(0, 0)
+        this.policy = new Policy(0.05, 0.0001)
         
-        // var q_value_manager_args = {
-        //     q_value_mean : 0,
-        //     q_value_variance : 1,
-        //     q_value_step_size : 0.3,
 
-        //     discounting_factor : 0.95,
-        //     reward_mean : 0,
-        //     reward_variance : 0,
-        //     reward_step_size : 0.5,
-        //     planning_num : 1000,
-        // }
-        // this.q_manager = new ValueManager(states, actions, q_value_manager_args)
 
         var mean = 0
         var variance = 1
@@ -294,7 +283,7 @@ class Agent{
         var recent_old_difference = this.check_recent_old_difference(state, action)
 
         if(this.use_forget){
-            this.forget_model(recent_old_difference)
+            this.forget_model(state, action, next_state, recent_old_difference)
         }
 
         var env_changeed = 1 < recent_old_difference
@@ -359,94 +348,19 @@ class Agent{
     }
 
 
-    forget_model(state, action, next_state, model_difference, forget_ratio){
+    forget_model(state, action, next_state, model_difference){
         if(2.3 < model_difference){
             this.model.forget_by_state_action(state, action, 1)
-            this.model.forget_by_state(next_state, 1)
-        }else if(2 < model_difference){
-            this.model.forget_by_state_action(state, action, 0.8)
-            this.model.forget_by_state(next_state, 0.8)
+            // this.model.forget_by_state(next_state, 1)
+            console.log("forget")
         }else if(1 < model_difference){
             this.model.forget_by_state_action(state, action, 0.5)
-            this.model.forget_by_state(next_state, 0.5)
+            // this.model.forget_by_state(next_state, 0.8)
+            console.log("forget")
+        }else if(0.8 < model_difference){
+            this.model.forget_by_state_action(state, action, 0.3)
+            // this.model.forget_by_state(next_state, 0.5)
+            console.log("forget")
         }
     }
 }
-
-// class ActionStateValueModel{
-//     constructor({state, action, mean=0, variance=1, min_step_size=0.05, recent_buffer_size=10, old_buffer_size=100}){
-//         this.state_num = state.length
-//         this.action_num = action.length
-
-
-//         this.use_forget = false
-//     }
-//     update_model(state, action, reward, next_state, finished){
-//         this.model.update(state, action, reward, next_state, finished)
-//     }
-
-//     get_reward_next_state_finished_sample(){
-//         return this.sample_model.get_reward_next_state_finished_sample()
-//     }
-
-//     get_reward_sample(next_step){
-//         return this.sample_model.get_reward_sample(next_step)
-//     }
-
-//     get_all_next_states(){
-//         return this.sample_model.get_all_next_states()
-//     }
-
-//     update_value(value, type="recent"){ // type: "recent", "old"
-        
-//         var model_difference = this.check_model_difference()
-//         if(this.use_forget){
-//             if(2.3 < model_difference){
-//                 this.forget_old(1)
-//                 console.log("forget 1")
-//             }else if(2 < model_difference){
-//                 this.forget_old(0.8)
-//                 console.log("forget 0.8")
-//             }else if(1 < model_difference){
-//                 this.forget_old(0.8)
-//                 console.log("forget 0.5")
-//             }
-//         }
-//         // console.log("model_difference: ", model_difference)
-
-
-//         this.value.update(value)
-//         if(this.sample_model.is_separable()){
-//             switch(type){
-//             case "recent":
-//                 this.recent_value_distribution_model.update(value)
-//                 break;
-//             case "old":
-//                 this.old_value_distribution_model.update(value)
-//                 break;
-//             }
-//         }
-//         return 1 < model_difference
-//     }
-    
-//     forget_old(){
-//         this.sample_model.forget_old_samples(this.forget_ratio)
-//         this.old_value_distribution_model.forget(1)
-//     }
-
-//     is_distribution_comparable(state, action){ // 둘 다 어느정도 사이즈를 갖추었는가?
-//         return (this.recent_value[state][action].size > 10) && (this.old_value[state][action].size > 10)
-//     }
-
-    
-
-//     get_print(){
-//         return `
-//         value: ${this.value.mean}
-//         recent_size:${this.sample_model.recent_size}
-//         old_size:${this.sample_model.old_size}
-//         recent_mean:${this.recent_value_distribution_model.mean}
-//         old_mean:${this.old_value_distribution_model.mean}
-//         `
-//     }
-// }

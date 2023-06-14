@@ -141,7 +141,7 @@ class ReinforcementLearningDemo{
         this.grid_env_view.setValue(x, y,  Math.floor(state_value*100)/100)
         this.grid_env_view.setArrows(x, y, action_value)
     }
-    
+
     update_grid_env_view_call_value_all(){
         for(var state of this.env.state_list){
             this.update_grid_env_view_cell_value(state)
@@ -235,19 +235,41 @@ class ReinforcementLearningDemo{
     }
 }
 
-var operator = new ReinforcementLearningDemo(5, 1, 0.7)
-document.body.appendChild(operator.getElement())
+
 async function experiment(){
+    var operator = new ReinforcementLearningDemo(5, 1, 0.7)
+    operator.agent.use_forget = false
+    operator.speed = 1
+    document.body.appendChild(operator.getElement())
+
+    var step_list = []
     for(var i=0 ; i<7 ; i++){
         for(var j=0 ; j<30 ; j++){
             var step_num = await operator.one_episode()
             operator.episode_step_chart_view.add(step_num)
             operator.episode_step_chart_view.update()
+            step_list.push(step_num)
         }
         operator.env.next_map()
         operator.update_map_view()
         
     }
+
+    return step_list
+
 }
 
-experiment()
+async function f(){
+    var element = document.createElement("div")
+    document.body.appendChild(element)
+    var results = []
+
+    for(var i=0 ; i<30 ; i++){
+        step_list = await experiment()
+        results.push(step_list)
+    }
+    
+    element.innerHTML = JSON.stringify(results)
+}
+
+f()

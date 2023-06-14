@@ -223,7 +223,7 @@ class ChangingFrozenLake1 extends FrozenLake{
          ["F", "F", "F", "F", "F"],
          ["F", "H", "H", "H", "F"],
          ["F", "F", "F", "F", "F"],
-         ["F", "F", "F", "F", "G"]],
+         ["F", "F", "F", "F", "G"]],         
         
         [["S", "F", "F", "F", "F"],
          ["F", "F", "H", "F", "F"],
