@@ -30,9 +30,9 @@ class Agent{
         this.recent_value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, min_step_size:min_step_size})
         this.old_value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, min_step_size:min_step_size})
         
-        // this.model = new SeperableStateActionModel({state_num:this.state_num, action_num:this.action_num, recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})
+        this.model = new SeperableStateActionModel({state_num:this.state_num, action_num:this.action_num, recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})
 
-        this.model = new SampleModel2(100000)
+        // this.model = new SampleModel2(100000)
         // this.model = new SampleModel2(100000)
 
         this.tau_value_table = new ActionTauTable(states, actions)
@@ -45,6 +45,7 @@ class Agent{
         this.first_state = new Callback_1()
         this.first_state_action = new Callback_2()
         this.total_step = 0
+        this.total_episode = 0
 
 
         this.use_forget = false
@@ -100,6 +101,7 @@ class Agent{
     
     start(state){
         this.finished = false
+        this.total_episode += 1
         this.past_state = state;        
         this.past_action = this.choose_action(state)
         return this.past_action;
@@ -276,6 +278,7 @@ class Agent{
             this.model.forget_by_state_action(state, action, 1)
             // this.model.forget_by_state(next_state, 0.5)
             console.log("forget 0.2")
+            this.forget_history.push([this.total_episode, this.total_step, state])
         }
     }
 }

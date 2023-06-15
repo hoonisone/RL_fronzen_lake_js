@@ -243,19 +243,20 @@ async function experiment(){
     document.body.appendChild(operator.getElement())
 
     var step_list = []
-    for(var i=0 ; i<5 ; i++){
+    var forget_history_list = []
+    for(var i=0 ; i<7 ; i++){
         for(var j=0 ; j<30 ; j++){
             var step_num = await operator.one_episode()
             operator.episode_step_chart_view.add(step_num)
             operator.episode_step_chart_view.update()
             step_list.push(step_num)
+            
         }
         operator.env.next_map()
         operator.update_map_view()
         
     }
-
-    return step_list
+    return [step_list, operator.agent.forget_history]
 }
 
 async function experiment2(){
@@ -265,13 +266,14 @@ async function experiment2(){
     document.body.appendChild(operator.getElement())
 
     var step_list = []
+    
     for(var i=0 ; i<30 ; i++){
         var step_num = await operator.one_episode()
         operator.episode_step_chart_view.add(step_num)
         operator.episode_step_chart_view.update()
-        step_list.push(step_num)        
+        step_list.push(step_num)   
     }
-
+    
     return step_list
 }
 
@@ -279,13 +281,16 @@ async function f(){
     var element = document.createElement("div")
     document.body.appendChild(element)
     var results = []
-
+    var forget_history_list = []
     for(var i=0 ; i<10 ; i++){
-        step_list = await experiment2()
+        var [step_list, forget_history] = await experiment()
         results.push(step_list)
+        forget_history_list.push(forget_history)    
+        
     }
+    // console.log(forget_history_list)
     
-    element.innerHTML = JSON.stringify(results)
+    element.innerHTML = JSON.stringify(forget_history_list)
 }
 
 f()
