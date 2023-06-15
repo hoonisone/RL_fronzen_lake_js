@@ -57,7 +57,7 @@ class ReinforcementLearningDemo{
         // document.body.appendChild(chart.element)
         
 
-        this.env = new FrozenLake(map_size, frozen_ratio)
+        // this.env = new FrozenLake(map_size, frozen_ratio)
         this.env = new ChangingFrozenLake1()
         
         this.agent = new Agent(this.env.getStates(), this.env.getActions())
@@ -238,12 +238,12 @@ class ReinforcementLearningDemo{
 
 async function experiment(){
     var operator = new ReinforcementLearningDemo(5, 1, 0.7)
-    operator.agent.use_forget = false
+    operator.agent.use_forget = true
     operator.speed = 1
     document.body.appendChild(operator.getElement())
 
     var step_list = []
-    for(var i=0 ; i<7 ; i++){
+    for(var i=0 ; i<5 ; i++){
         for(var j=0 ; j<30 ; j++){
             var step_num = await operator.one_episode()
             operator.episode_step_chart_view.add(step_num)
@@ -256,7 +256,23 @@ async function experiment(){
     }
 
     return step_list
+}
 
+async function experiment2(){
+    var operator = new ReinforcementLearningDemo(5, 1, 1)
+    operator.agent.use_forget = false
+    operator.speed = 1
+    document.body.appendChild(operator.getElement())
+
+    var step_list = []
+    for(var i=0 ; i<30 ; i++){
+        var step_num = await operator.one_episode()
+        operator.episode_step_chart_view.add(step_num)
+        operator.episode_step_chart_view.update()
+        step_list.push(step_num)        
+    }
+
+    return step_list
 }
 
 async function f(){
@@ -264,8 +280,8 @@ async function f(){
     document.body.appendChild(element)
     var results = []
 
-    for(var i=0 ; i<30 ; i++){
-        step_list = await experiment()
+    for(var i=0 ; i<10 ; i++){
+        step_list = await experiment2()
         results.push(step_list)
     }
     
@@ -273,3 +289,5 @@ async function f(){
 }
 
 f()
+
+// experiment2()

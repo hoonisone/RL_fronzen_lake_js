@@ -1,91 +1,3 @@
-class AgentGrupe{
-    
-    constructor(states, actions){
-        this.states = states
-        this.actions = actions
-        this.agents = []
-        this.total_step = 0
-
-        // // policy
-        // this.qw = 0
-        // this.ew = 1
-        // this.tw = 0.000
-
-        // // reward
-        // this.default_reward = -0.01
-        // this.curiosity_reward = 0.1
-
-        // // q_value
-        // this.q_default_value = 0, 
-        // this.q_step_size = 0.05, 
-        // this.q_gamma = 0.99
-
-        // this.q_model_mean = this.default_reward
-        // this.q_model_variance = 0
-        // this.q_model_step_size = 0.05
-
-        // // e_value
-        // this.e_default_value = 0.1, 
-        // this.e_step_size = 0.05,
-        // this.e_gamma = 0.9
-        
-        // this.e_model_mean = 0
-        // this.e_model_variance = 0
-        // this.e_model_step_size = 0.05
-
-
-        // this.epsilon = 0.03
-
-        // this.policy = new Policy(this, this.epsilon, this.qw, this.ew, this.tw)
-
-        // this.q_value_table = new StateActionValueModel (states, actions, this.q_default_value, this.q_step_size, this.q_gamma)
-        // this.q_value_model = new ActionRewardModel(states, actions, this.q_model_mean, this.q_model_variance, this.Stateq_model_step_size)
-
-        // this.e_value_table = new StateActionValueModel (states, actions, this.e_default_value, this.e_step_size, this.e_gamma)
-        // this.e_value_model = new ActionRewardModel(states, actions, this.e_model_mean, this.e_model_variance, this.e_modelState_step_size, false)
-
-        // this.tau_value_table = new ActionTauTable(states, actions)
-
-        // this.memory = new Memory(states, actions)
-
-
-
-        this.after_action_value_update_callback = new Callback_2() // state, action
-        this.after_step_callback = new Callback_0()
-        this.goal_callback = new Callback_0()
-        this.hall_callback = new Callback_0()
-        this.first_state = new Callback_1()
-        this.first_state_action = new Callback_2()
-    }
-
-    isValidAgnet(agent){
-        return util.listComp(agent.states, this.states) && util.listComp(agent.actions, this.actions) 
-    }
-
-    addAgent(agent){
-        if(this.isValidAgnet(agent)){
-            agent.set_group(this) // 꼼수.. agent랑 동일한 값들을 따로 정의하기 귀찮
-            this.agents.push(agent)
-            agent.after_step_callback.add(() => this.after_step_callback.invoke())
-            agent.goal_callback.add(() => this.goal_callback.invoke())
-            agent.hall_callback.add(() => this.hall_callback.invoke())
-            agent.first_state_action.add((state, action) => this.first_state_action.invoke(state, action))
-            agent.first_state.add((state) => this.first_state.invoke(state))
-            agent.after_action_value_update_callback.add((state, action) => this.after_action_value_update_callback.invoke(state, action))
-        }else{
-            throw "invalid agent!!! check the states and actions"
-        }
-    }
-
-    getAgent(idx){
-        return this.agents[idx]
-    }
-
-    get_memory(){
-        return this.memory
-    }
-}
-
 class Agent{
     constructor(states, actions){
         // reward
@@ -107,20 +19,21 @@ class Agent{
         // Policy
         this.policy = new Policy(0.05, 0.0001)
         
-
-
-        var mean = 0
-        var variance = 1
         var min_step_size = 0.05
-        var recent_buffer_size = 3
-        var old_buffer_size = 100
+        var recent_buffer_size = 10
+        var old_buffer_size = 30
+
+        console.log(recent_buffer_size, old_buffer_size)
 
 
-        this.value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, mean:mean, variance:variance, min_step_size:min_step_size})
-        this.recent_value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, mean:mean, variance:variance, min_step_size:min_step_size})
-        this.old_value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, mean:mean, variance:variance, min_step_size:min_step_size})
+        this.value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, min_step_size:min_step_size})
+        this.recent_value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, min_step_size:min_step_size})
+        this.old_value = new StateActionValue({state_num:this.state_num, action_num:this.action_num, min_step_size:min_step_size})
         
-        this.model = new StateActionModel({state_num:this.state_num, action_num:this.action_num, recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})
+        // this.model = new SeperableStateActionModel({state_num:this.state_num, action_num:this.action_num, recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})
+
+        this.model = new SampleModel2(100000)
+        // this.model = new SampleModel2(100000)
 
         this.tau_value_table = new ActionTauTable(states, actions)
 
@@ -138,6 +51,9 @@ class Agent{
         this.planning_num = 100
         this.heap = new Heap()
         this.gamma = 0.95
+
+        this.planning_value_threshold = 0.1
+        this.forget_history = []
     }
     
     set epsilon(value){
@@ -216,7 +132,7 @@ class Agent{
         var visited = new Set()
         while(!this.heap.is_empty()){
             var [state, action] = this.heap.pop()
-            var [type, [state, action, reward, next_state, finished]] = this.model.get_sample_with_state_action(state, action)
+            var [type, state, action, reward, next_state, finished] = this.model.get_sample(null, state, action, null, null, null)
             if(type == null){
                 continue
             }
@@ -229,8 +145,9 @@ class Agent{
 
 
             var next_state = state
-            var samples = this.model.get_all_samples_with_next_state(next_state)
-            for(var [type, [state, action, reward, next_state, finished]] of samples){
+            var samples = this.model.get_all_samples(null, null, null, null, next_state, null)
+
+            for(var [type, state, action, reward, next_state, finished] of samples){
                 if(visited.has(`${[state, action]}`)){
                     continue
                 }else{
@@ -238,16 +155,16 @@ class Agent{
                 value = this.bootstrap_value(reward, next_state, finished)
                 var p = Math.abs(value - this.value.get_value(state, action))
                 if(this.planning_value_threshold <= p){
-                    this.heap.push([p, ps, pa])
+                    this.heap.push([state, action])
                 }
             }
         }
     }
 
     planning(){
-        this.pq_planning()
+        // this.pq_planning()/
         for(var i=0 ; i<this.planning_num ; i++){
-            var [type, [state, action, reward, next_state, finished]] = this.model.get_sample()
+            var [type, state, action, reward, next_state, finished] = this.model.get_sample(null, null, null, null, null, null)
             if(type == null){
                 continue
             }
@@ -277,6 +194,7 @@ class Agent{
 
 
         this.value.update(state, action, value)
+        this.after_action_value_update_callback.invoke(state, action)
         this.recent_value.update(state, action, value)
         this.model.update(state, action, reward, next_state, finished)
 
@@ -349,18 +267,15 @@ class Agent{
 
 
     forget_model(state, action, next_state, model_difference){
+        
         if(2.3 < model_difference){
             this.model.forget_by_state_action(state, action, 1)
             // this.model.forget_by_state(next_state, 1)
             console.log("forget")
-        }else if(1 < model_difference){
-            this.model.forget_by_state_action(state, action, 0.5)
-            // this.model.forget_by_state(next_state, 0.8)
-            console.log("forget")
-        }else if(0.8 < model_difference){
-            this.model.forget_by_state_action(state, action, 0.3)
+        }else if(1.5 < model_difference){
+            this.model.forget_by_state_action(state, action, 1)
             // this.model.forget_by_state(next_state, 0.5)
-            console.log("forget")
+            console.log("forget 0.2")
         }
     }
 }

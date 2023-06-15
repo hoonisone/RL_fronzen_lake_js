@@ -83,44 +83,40 @@ class RewardStateModel{
         return Object.keys(this.state_to_reward_model)
     }
 
-    get_next_state_finished_sample(){
-        if(this.sample_buffer.length == 0){
-            return [null, null]
-                        
+    get_sample(reward, next_state, finished){
+        if(this.check(false, false, false, reward, next_state, finished)){
+            if(this.sample_buffer.length == 0){
+                return [null, null, null]
+            }
+            [next_state, finished] = random_util.randomChoice(this.sample_buffer)
+            return this.get_sample(null, next_state, finished)
         }
-        return random_util.randomChoice(this.sample_buffer)
-    }
-
-    get_reward_next_state_finished_sample(){
-        var [next_state, finished] = this.get_next_state_finished_sample()
-        if(next_state == null){
-            return [null, null, null]
-            
+        else if(this.check(false, true, true, reward, next_state, finished)){ // next_state, finished -> reward 만
+            if(!(next_state in this.state_to_reward_model)){
+                return [null, null, null]
+            }
+            reward = this.state_to_reward_model[next_state].mean
         }
-        
-        var reward = this.get_reward_sample(next_state)
+        else if(this.check(false, true, false, reward, next_state, finished)){ // next_state, finished -> reward 만
+            if(!(next_state in this.state_to_reward_model)){
+                return [null, null, null]
+            }
+            finished = false
+            for(var [ns, _f] of this.sample_buffer){
+                if(ns == next_state){
+                    finished = _f
+                    break
+                }
+            }
+            return this.get_sample(null, next_state, finished)
+        }
         return [reward, next_state, finished]
     }
 
-    get_reward_sample(next_state){
-        if(!(next_state in this.state_to_reward_model)){
-            return null
-        }
-        return this.state_to_reward_model[next_state].mean
-    }
-
-    get_reward_finished_sample_with_next_state(next_state){
-        if(!(next_state in this.state_to_reward_model)){
-            return null
-        }
-        var f = false
-        for(var [ns, _f] of this.sample_buffer){
-            if(ns == next_state){
-                f = _f
-                break
-            }
-        }
-        return [this.state_to_reward_model[next_state].mean, f]
+    check(a1, b1, c1, a2, b2, c2){
+        return (a1 == (a2!=null) 
+        && b1 == (b2 != null) 
+        && c1 == (c2 != null))
     }
 
     get size(){return this.sample_buffer.length}
@@ -182,47 +178,30 @@ class SeparableRewardStateModel{
     }
 
     is_empty() {return this.size == 0}
-    get_reward_next_state_finished_sample(){
-        if(this.is_empty()){
-             return [null, [null, null, null]]
+
+    get_sample(type=null, reward=null, next_state=null, finished=null){
+        if(type == null){
+            var recent_ratio = this.recent_size/this.size
+            var recent = (Math.random() <= recent_ratio)
+            type = recent?"recent":"old"
+            return this.get_sample(type, reward, next_state, finished)
+        }else{
+            
+            var model = (type == "recent") ? this.recent_sample_model : this.old_sample_model
+            var result = model.get_sample(null, null, null)
+            var [reward, next_state, finished] = result
+            if(reward == null)
+                return [null, null, null, null]
+            return [type, reward, next_state, finished]
         }
-        var recent_ratio = this.recent_size/this.size
-        var recent = (Math.random() <= recent_ratio)
-        var type = recent?"recent":"old"
-        var [reward, next_state, finished] = (recent? this.recent_sample_model : this.old_sample_model).get_reward_next_state_finished_sample()
-        if(reward == null){
-            return [null, [null, null, null]]
-        }
-        return [type, [reward, next_state, finished]]
+    }
+    check(a1, b1, c1, d1, a2, b2, c2, d2){
+        return (a1 == (a2!=null) 
+        && b1 == (b2 != null) 
+        && c1 == (c2 != null)
+        && d1 == (d2 != null))
     }
 
-    get_reward_sample(next_step){
-        if(this.is_empty()){
-                return [null, null]
-        }
-        var recent_ratio = this.recent_size/this.size
-        var recent = (Math.random() <= recent_ratio)
-        var type = recent?"recent":"old"
-        var reward = (recent? this.recent_sample_model : this.old_sample_model).get_reward_sample(next_step)
-        if(recent == null){
-            return [null, null]
-        }
-        return [type, reward]
-    }
-
-    get_reward_finished_sample_with_next_state(next_step){
-        if(this.is_empty()){
-            return [null, [null, null]]
-        }
-        var recent_ratio = this.recent_size/this.size
-        var recent = (Math.random() <= recent_ratio)
-        var type = recent?"recent":"old"
-        var [reward, finished] = (recent? this.recent_sample_model : this.old_sample_model).get_reward_finished_sample_with_next_state(next_step)
-        if(recent == null){
-            return [null, [null, null]]
-        }
-        return [type, [reward, finished]]
-    }
 
     forget_recent_samples(forget_ratio){
         this.recent_sample_model.forget(forget_ratio)
@@ -262,17 +241,17 @@ class StateActionValue extends ObjectTable{
     }
 }
 
-class StateActionModel extends ObjectTable{
+class SeperableStateActionModel extends ObjectTable{
     constructor({state_num, action_num, recent_buffer_size=10, old_buffer_size=100}){
         super({height:state_num, 
                width:action_num, 
                object_generator:() => new SeparableRewardStateModel({recent_buffer_size:recent_buffer_size, old_buffer_size:old_buffer_size})})
-        this.recent_visit = []
+        this.recent_visit = new SampleModel(100000)
         this.state_to_pre_state_action = {}
     }
 
     update(state, action, reward, next_state, finished){
-        this.recent_visit.unshift([state, action])
+        this.recent_visit.update([state, action])
 
         this.table[state][action].update(reward, next_state, finished)
 
@@ -282,31 +261,50 @@ class StateActionModel extends ObjectTable{
         this.state_to_pre_state_action[next_state].add(JSON.stringify([state, action]))
     }
 
-    get_sample(){
-        var[state, action] = random_util.randomChoice(this.recent_visit)
-        return this.get_sample_with_state_action(state, action)
-    }
-
-    get_sample_with_state_action(state, action){
-        this.table[state][action].get_reward_next_state_finished_sample()
-
-        var [type, [reward, next_state, finished]] = this.table[state][action].get_reward_next_state_finished_sample()
-        if(type == null){
-            return [null, [null, null, null, null, null]]
-        }
-        return [type, [state, action, reward, next_state, finished]]
-    }
-
-    get_all_samples_with_next_state(next_state){
-        var arr = []
-        for(var [state, action] of this.state_to_pre_state_action[next_state]){
-            var [type, [reward, finished]] = this.table[state][action].get_reward_finished_sample_with_next_state(next_state)
-            if(type == null){
-                continue
+    get_sample(type = null, state=null, action=null, reward=null, next_state=null, finished=null){
+        if(this.check([false, false, false, false, false, false], [type, state, action, reward, next_state, finished])){
+            [state, action] = this.recent_visit.get_sample()
+            if(state == null){
+                return [null, null, null, null, null, null]
             }
-            arr.push([type, [state, action, reward, next_state, finished]])
+            
+            return this.get_sample(null, state, action, null, null, null)
         }
-        return arr
+        else if(this.check([false, true, true, false, false, false], [type, state, action, reward, next_state, finished])){
+            var [type, reward, next_state, finished] = this.table[state][action].get_sample(null, null, null, null)
+            
+            if(type == null){
+                return [null, null, null, null, null, null]
+            }
+            return [type, state, action, reward, next_state, finished]
+        }else if(this.check([false, true, true, false, true, false], [type, state, action, reward, next_state, finished])){
+            var [type, reward, next_state, finished] = this.table[state][action].get_sample(null, null, next_state, null)
+            return [type, state, action, reward, next_state, finished]
+        }
+        
+        throw new Error("정의되지 않은 케이스");
+    }
+
+    get_all_samples(type=null, state=null, action=null, reward=null, next_state=null, finished=null){
+        if(this.check([false, false, false, false, true, false], [type, state, action, reward, next_state, finished])){
+            var arr = []
+            for(var x of this.state_to_pre_state_action[next_state]){
+                [state, action] = JSON.parse(x)
+                var [type, state, action, reward, next_state, finished] = this.get_sample(null, state, action, null, next_state, null)
+                if(type == null)
+                    continue
+                arr.push([type, state, action, reward, next_state, finished])
+            }
+            return arr
+        }
+    }
+    check(flags, values){
+        for(var i=0 ; i<values.length ; i++){
+            if(flags[i] != (values[i] != null)){
+                return false
+            }
+        }
+        return true
     }
 
     
@@ -329,7 +327,7 @@ class StateActionModel extends ObjectTable{
             }
             new_list.unshift()
         }
-        this.recent_visit = new_list
+        this.recent_visit.forget()
     }
 
     // forget_by_state(state, forget_ratio){
@@ -354,3 +352,50 @@ class StateActionModel extends ObjectTable{
     }
 }
 
+class SampleModel{
+    constructor(buffer_size){
+        this.buffer = []
+        this.buffer_size = buffer_size
+    }
+
+    update(sample){
+        this.buffer.unshift(sample)
+        if(this.buffer_size < this.buffer.length){
+            this.buffer.pop()
+        }
+    }
+
+    get_sample(){
+        if(this.buffer.length == 0){
+            return [null, null, null, null, null, null]
+        }
+        return random_util.randomChoice(this.buffer)
+    }
+
+    forget(){
+        this.buffer = []
+    }
+}
+
+class SampleModel2{
+    constructor(buffer_size){
+        this.buffer = []
+        this.buffer_size = buffer_size
+    }
+
+    update(state, action, reward, next_state, finished){
+        this.buffer.unshift([state, action, reward, next_state, finished])
+        if(this.buffer_size < this.buffer.length){
+            this.buffer.pop()
+        }
+    }
+
+    get_sample(){
+        if(this.buffer.length == 0){
+            return [null, null, null, null, null, null]
+        }
+        var [state, action, reward, next_state, finished] = random_util.randomChoice(this.buffer)
+
+        return ["recent", state, action, reward, next_state, finished]
+    }
+}

@@ -6,7 +6,7 @@ class FrozenLake{
         
         this.frozen_ratio = frozen_ratio
         this.map = this.generateRandomMap(this.map_size, this.frozen_ratio)
-        this.random_next_probability = 0.1
+        this.random_next_probability = 0.3
     }
 
     get_type(state){
