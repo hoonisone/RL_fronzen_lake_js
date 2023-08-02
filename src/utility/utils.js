@@ -96,7 +96,7 @@ class util{
     array_functions = []
     static argMax(array, all=false) {
         if(all == false){
-            return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
+            return array.ma ((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
         }else{
             var max_value = Math.max(...array)
             var max_index_list = []
