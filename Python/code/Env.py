@@ -174,7 +174,7 @@ class FrozenLake:
 
 env = FrozenLake(map_size = 5, frozen_ratio = 0.1, random_next_probability = 0.1)
 
-data_dir = Path("./../../data")
+data_dir = Path("./../data")
 
 class ChangingFrozenLake(FrozenLake):
     def __init__(self, map_name):
