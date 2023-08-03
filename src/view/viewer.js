@@ -392,7 +392,6 @@ class GridEnvironmentView{
 
 
     showAgent(x, y, agent_idx, flag){
-    
         if(flag == true){
             this.cellMap[y][x].agentEnter()
         }else{

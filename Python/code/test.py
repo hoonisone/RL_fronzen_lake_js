@@ -1,36 +1,71 @@
 import Demo
-import multiprocessing
-from multiprocessing import Process 
+
 import json
+import Env
+import Agent
+from multi import *
 
-def f(id, return_dict):
-    demo = Demo.Demo(use_forget = False)
-    result = demo.one_test(change_period=30)
-    return_dict[id] = result
 
+def test(args):
+    map_name = args["map_name"]
+    use_forget = args["use_forget"]
+    episode_per_map = args["episode_per_map"]
+    verbose = args["verbose"]
+
+    env = Env.ChangingFrozenLake(map_name)
+    agent = Agent.Agent(env.get_states(), env.get_actions())
+    agent.use_forget = use_forget
+    demo = Demo.Demo(env, agent)
+    return demo.test_with_changing_map(episode_per_map = episode_per_map, verbose = verbose)
+
+def test_and_save(args):
+    multi_num = args["multi_num"]
+    save_path = args["save_path"]
+
+    result = do_multi_processing(test, args, multi_num)
+    with open(save_path, "w") as f:
+        f.write(json.dumps(result))
+
+test_10x10_forget = {
+    "map_name":"10x10",
+    "use_forget":True,
+    "episode_per_map":30,
+    "verbose":False,
+    "multi_num":10,
+    "save_path":"./../data/test_result_5x5_forget.txt"
+}
+
+test_10x10_no_forget = {
+    "map_name":"10x10",
+    "use_forget":False,
+    "episode_per_map":30,
+    "verbose":False,
+    "multi_num":10,
+    "save_path":"./../data/test_result_5x5_no_forget.txt"
+}
+
+test_5x5_forget = {
+    "map_name":"5x5",
+    "use_forget":True,
+    "episode_per_map":30,
+    "verbose":False,
+    "multi_num":10,
+    "save_path":"./../data/test_result_5x5_forget).txt"
+}
+
+test_5x5_no_forget = {
+    "map_name":"5x5",
+    "use_forget":False,
+    "episode_per_map":30,
+    "verbose":False,
+    "multi_num":10,
+    "save_path":"./../data/test_result_5x5_forget).txt"
+}
 if __name__ == '__main__':
-    # 프로세스의 결과물을 저장하기 위한 공용 저장소
-    manager = multiprocessing.Manager()
-    return_dict = manager.dict()
+    # test_and_save(forget_test)
+    # test_and_save(no_forget_test)
+    test_and_save(test_10x10_forget)
+    test_and_save(test_10x10_no_forget)
 
-
-    p_list = []
-    for id in range(10):
-        p = Process(target=f, args=(0, return_dict))
-        p_list.append(p)
-
-
-    for p in p_list:    
-        p.start()
-    
-    for p in p_list:
-        p.join()
-    
-    print(return_dict)
-    result = json.dumps(dict(return_dict))
-
-    with open("./../data/result.txt", "w") as f:
-        f.write(result)
-
-
-
+    test_and_save(test_5x5_forget)
+    test_and_save(test_5x5_no_forget)

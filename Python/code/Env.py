@@ -178,8 +178,9 @@ data_dir = Path("./../data")
 
 class ChangingFrozenLake(FrozenLake):
     def __init__(self, map_name):
-        super().__init__(5, 1)
         self.map_list = ChangingFrozenLake.load_map(map_name = map_name)
+        map_size = len(self.map_list[0])
+        super().__init__(map_size, 1)
         self.start_map()
 
     def next_map(self):
@@ -203,7 +204,7 @@ class ChangingFrozenLake(FrozenLake):
         df.fillna("F", inplace = True)
         map_size = len(df.loc[0])
         map_num = int(len(df)/map_size)
-        map_list = [df.loc[i*map_size:(i+1)*map_size].to_numpy() for i in range(map_num)]
+        map_list = [df.loc[i*map_size:(i+1)*map_size-1].to_numpy() for i in range(map_num)]
         return map_list
     
     @staticmethod

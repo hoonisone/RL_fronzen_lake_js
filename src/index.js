@@ -237,7 +237,7 @@ class ReinforcementLearningDemo{
 
 
 async function experiment(){
-    var operator = new ReinforcementLearningDemo(5, 1, 0.7)
+    var operator = new ReinforcementLearningDemo(10, 1, 0.7)
     operator.agent.use_forget = true
     operator.speed = 1
     document.body.appendChild(operator.getElement())
@@ -260,7 +260,7 @@ async function experiment(){
 }
 
 async function experiment2(){
-    var operator = new ReinforcementLearningDemo(5, 1, 1)
+    var operator = new ReinforcementLearningDemo(10, 1, 1)
     operator.agent.use_forget = false
     operator.speed = 1
     document.body.appendChild(operator.getElement())

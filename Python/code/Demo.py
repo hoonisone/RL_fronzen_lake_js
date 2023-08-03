@@ -7,26 +7,20 @@ import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 
-def get_test_env():
-#     return Env.FrozenLake(map_size = 5, frozen_ratio = 0.9, random_next_probability = 0.1)
-    return Env.ChangingFrozenLake("5x5")
-
-def get_test_agent(env, use_forget = False):
-    agent = Agent.Agent(env.get_states(), env.get_actions())
-    agent.use_forget = use_forget
-    return agent
-
 class Demo:
-    def __init__(self, use_forget):
-        self.env = get_test_env()
-        self.agent = get_test_agent(self.env, use_forget)
+    def __init__(self, env, agent):
+        self.env = env
+        self.agent = agent
         self.agent.start(0)
         
-    def one_step(self):
+    def one_step(self, verbose=False):
             if self.agent.finished:
                 self.agent.start(0)
             else:
                 state, reward, done = self.env.step(self.agent.past_state, self.agent.past_action)
+                if verbose:
+                    print(state, reward, done)
+                    
                 if done == True:
                     self.agent.step(reward, state, True)
                     return True
@@ -34,25 +28,28 @@ class Demo:
                     self.agent.step(reward, state, False)
                     return False
                 
-    def one_episode(self):
+    def one_episode(self, verbose=False):
         while True:
-            if self.one_step() == True:
+            if self.one_step(verbose=verbose) == True:
                 result = {"step_num":self.agent.latest_step}
                 return result
+    
 
-    def one_test(self, change_period):
+    # def repeat_test(self, test_num, change_period, verbose=False):
+    #     return [self.one_test(change_period, verbose=verbose) for i in tqdm.tqdm(range(test_num))]
+    
+    # def test(self, verbose=False):
+    #     return self.repeat_test(10, 30, verbose=verbose)
+            
+    def test_with_changing_map(self, episode_per_map, verbose = False):
         self.env.start_map()
         test_result = []
-        for c in range(self.env.map_num):
-            for i in range(change_period):
-                result = self.one_episode()
-                test_result.append(result)
-            self.env.next_map()
+        for i in range(self.env.map_num*episode_per_map):
+
+            result = self.one_episode(verbose=verbose)
+            test_result.append(result)
+
+            if i % episode_per_map == (episode_per_map-1):
+                self.env.next_map()
         return test_result
-    
-    def repeat_test(self, test_num, change_period):
-        return [self.one_test(change_period) for i in tqdm.tqdm(range(test_num))]
-    
-    def test(self):
-        return self.repeat_test(10, 30)
-            
+
