@@ -1,12 +1,6 @@
-import import_ipynb
-import random
-import Policy
-import Model
-import util
+from RL import Model, Policy, util
 import numpy as np
 import json
-import Env
-
 class Agent:
     def __init__(self, states, actions):
         # reward

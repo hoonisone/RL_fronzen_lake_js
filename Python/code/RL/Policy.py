@@ -1,7 +1,7 @@
-import import_ipynb
 import random
 import numpy as np
-import util
+
+from RL import util
 
 class EnvChangeRatioChecker:
     """
