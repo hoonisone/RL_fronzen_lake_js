@@ -178,7 +178,7 @@ class RewardStateModel:
 
     def forget(self, forget_ratio):
         forget_num = math.floor(self.size*forget_ratio)
-        for i in range(forget_num): 
+        for i in range(min(forget_num, self.size)): 
             forget_next_state, forget_finished = self.sample_buffer.pop()
             self.state_to_reward_model[forget_next_state].pop()
             

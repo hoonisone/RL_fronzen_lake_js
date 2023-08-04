@@ -25,6 +25,8 @@ class Agent:
 
         self.finished = True
 
+        self.forget_metric = [[2, 1]]
+
         # Policy
         self.policy = Policy.Policy(0.05, 0.0001)
 
@@ -232,14 +234,19 @@ class Agent:
         return (self.recent_value.get_size(state, action) > 10) and (self.old_value.get_size(state, action) > 10)
 
     def forget_model(self, state, action, next_state, model_difference):
-        if model_difference > 2.3:
-            self.model.forget_by_state_action(state, action, 1)
-            # self.model.forget_by_state(next_state, 1)
-            print("forget")
-        elif model_difference > 1.5:
-            self.model.forget_by_state_action(state, action, 1)
-            # self.model.forget_by_state(next_state, 0.5)
-            print("forget 0.2")
-            self.forget_history.append([self.total_episode, self.total_step, state])
+
+        for threshold, ratio in self.forget_metric:
+            if threshold < model_difference:
+                self.model.forget_by_state_action(state, action, ratio)
+        #         break    
+        # if model_difference > 2.3:
+        #     self.model.forget_by_state_action(state, action, 1)
+        #     # self.model.forget_by_state(next_state, 1)
+        #     print("forget")
+        # elif model_difference > 1.5:
+        #     self.model.forget_by_state_action(state, action, 0.5)
+        #     # self.model.forget_by_state(next_state, 0.5)
+        #     print("forget 0.2")
+        #     self.forget_history.append([self.total_episode, self.total_step, state])
 
 
