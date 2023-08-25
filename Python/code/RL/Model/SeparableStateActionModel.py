@@ -1,16 +1,15 @@
 import random
 import  json
-from RL import Model
-
-from RL import util
-
+from rl import util
+from . import SeparableRewardStateModel
+from . import SampleModel
 
 class SeperableStateActionModel:
     
     def __init__(self, state_num, action_num, recent_buffer_size=10, old_buffer_size=10):
-        creator = lambda : Model.SeparableRewardStateModel(recent_buffer_size=recent_buffer_size, old_buffer_size=old_buffer_size)
+        creator = lambda : SeparableRewardStateModel(recent_buffer_size=recent_buffer_size, old_buffer_size=old_buffer_size)
         self.table = util.create_object_tensor([state_num, action_num], creator)
-        self.recent_visit = Model.SampleModel(100000)
+        self.recent_visit = SampleModel(100000)
         self.state_to_pre_state_action = {}
         
     def update(self, state, action, reward, next_state, finished):

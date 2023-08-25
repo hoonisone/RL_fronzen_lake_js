@@ -1,11 +1,11 @@
 import random
 
-from RL import Model
+from . import RewardStateModel
 
 class SeparableRewardStateModel:
     def __init__(self, recent_buffer_size=10, old_buffer_size=100):
-        self.recent_sample_model = Model.RewardStateModel(buffer_size=recent_buffer_size)
-        self.old_sample_model = Model.RewardStateModel(buffer_size=old_buffer_size)
+        self.recent_sample_model = RewardStateModel(buffer_size=recent_buffer_size)
+        self.old_sample_model = RewardStateModel(buffer_size=old_buffer_size)
     
     def update(self, reward, next_state, finished):
         pop_state, pop_action, pop_finished = self.recent_sample_model.update(reward, next_state, finished)

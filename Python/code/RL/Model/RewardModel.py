@@ -1,4 +1,4 @@
-from RL import util
+from rl import util
 import numpy as np
 
 class RewardModel:

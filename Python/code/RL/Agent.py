@@ -1,7 +1,26 @@
-from RL import Model, Policy, util
+from rl import policy, util
+from rl.model import *
 import numpy as np
 import json
-class Agent:
+from abc import *
+from rl.model import StateActionValue
+from rl.model import SeperableStateActionModel
+
+class Agent(metaclass=ABCMeta):
+    def __init__(self, states, actions):
+        self.states = states
+        self.actions = actions
+
+    def start():
+        pass
+
+    def step():
+        pass
+
+class Dyna_Q_Plus(Agent):
+    pass
+
+class ProposedAgent:
     def __init__(self, states, actions):
         # reward
         self.default_reward = -0.03
@@ -22,20 +41,20 @@ class Agent:
         self.forget_metric = [[2, 1]]
 
         # Policy
-        self.policy = Policy.Policy(0.05, 0.0001)
+        self.policy = policy.Policy(0.05, 0.0001)
 
         min_step_size = 0.05
         recent_buffer_size = 10
         old_buffer_size = 30
 
 
-        self.value = Model.StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
-        self.recent_value = Model.StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
-        self.old_value = Model.StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
+        self.value = StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
+        self.recent_value = StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
+        self.old_value = StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
 
-        self.model = Model.SeperableStateActionModel(state_num=self.state_num, action_num=self.action_num, recent_buffer_size=recent_buffer_size, old_buffer_size=old_buffer_size)
+        self.model = SeperableStateActionModel(state_num=self.state_num, action_num=self.action_num, recent_buffer_size=recent_buffer_size, old_buffer_size=old_buffer_size)
 
-        self.tau_value_table = Model.ActionTauTable(states, actions)
+        self.tau_value_table = ActionTauTable(states, actions)
 
 #         self.after_action_value_update_callback = Callback_2()  # state, action
 
@@ -140,6 +159,7 @@ class Agent:
                 p = abs(value - self.value.get_value(state, action))
                 if self.planning_value_threshold <= p:
                     self.heap.push([state, action])
+                    
     def planning(self):
         for _ in range(self.planning_num):
             

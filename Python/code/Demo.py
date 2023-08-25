@@ -1,12 +1,3 @@
-import import_ipynb
-import Model
-import Env
-import Agent
-import random
-import tqdm
-import matplotlib.pyplot as plt
-import numpy as np
-
 class Demo:
     def __init__(self, env, agent):
         self.env = env
@@ -17,7 +8,8 @@ class Demo:
             if self.agent.finished:
                 self.agent.start(0)
             else:
-                state, reward, done = self.env.step(self.agent.past_state, self.agent.past_action)
+                reward, state, done = self.env.step(self.agent.past_state, self.agent.past_action)
+
                 if verbose:
                     print(state, reward, done)
                     

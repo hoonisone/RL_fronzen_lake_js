@@ -1,7 +1,7 @@
 import random
 import numpy as np
 
-from RL import util
+from rl import util
 
 class EnvChangeRatioChecker:
     """

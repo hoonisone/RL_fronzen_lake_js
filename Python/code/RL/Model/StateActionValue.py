@@ -1,9 +1,9 @@
-from RL import Model
-from RL import util
+from . import GaussianDistributionModel
+from rl import util
 
 class StateActionValue():
     def __init__(self, state_num, action_num, mean=0, variance=1, min_step_size=0.05):
-        creator = lambda: Model.GaussianDistributionModel(mean=mean, variance=variance, min_step_size=min_step_size)
+        creator = lambda: GaussianDistributionModel(mean=mean, variance=variance, min_step_size=min_step_size)
         self.table = util.create_object_tensor([state_num, action_num], creator)
         
         

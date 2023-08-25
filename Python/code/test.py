@@ -1,10 +1,9 @@
+from rl.env.grid import ChangingGridEnv
+from rl.agent import ProposedAgent
 import Demo
 
 import json
-import Env
-import Agent
 from multi import *
-import numpy as np
 
 def test(args):
     map_name = args["map_name"]
@@ -12,8 +11,8 @@ def test(args):
     episode_per_map = args["episode_per_map"]
     verbose = args["verbose"]
     forget_metric = args["forget_metric"]
-    env = Env.ChangingFrozenLake(map_name)
-    agent = Agent.Agent(env.get_states(), env.get_actions())
+    env = ChangingGridEnv(map_name)
+    agent = ProposedAgent(env.states, env.actions)
     agent.use_forget = use_forget
     agent.forget_metric = forget_metric
     demo = Demo.Demo(env, agent)
@@ -92,10 +91,10 @@ if __name__ == '__main__':
     #         forget_tunning["save_path"] = f"./../data/tuning/5x5_({threshold}, {ratio}).txt"
     #         test_and_save(forget_tunning)
 
-    # test_and_save(test_5x5_forget)
+    test_and_save(test_5x5_forget)
     # test_and_save(test_5x5_no_forget)
     # test_and_save(test_10x10_forget)
-    test_and_save(test_10x10_no_forget)
+    # test_and_save(test_10x10_no_forget)
 
 
 

@@ -1,6 +1,6 @@
 
 import math
-from RL import util
+from rl import util
 
 def print_dict(keys, values):
     max_len = max([len(str(key)) for key in keys])

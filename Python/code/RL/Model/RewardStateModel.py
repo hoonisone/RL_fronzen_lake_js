@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from RL import Model
+from . import RewardModel
 
 class RewardStateModel:
     def __init__(self, buffer_size=10):
@@ -12,7 +12,7 @@ class RewardStateModel:
 
     def update(self, reward, next_state, finished):
         if next_state not in self.state_to_reward_model:
-            self.state_to_reward_model[next_state] = Model.RewardModel()
+            self.state_to_reward_model[next_state] = RewardModel()
         
         self.sample_buffer.insert(0, [next_state, finished])
         self.state_to_reward_model[next_state].add(reward)
