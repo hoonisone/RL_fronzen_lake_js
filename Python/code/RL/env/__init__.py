@@ -20,7 +20,9 @@ class Env(metaclass=ABCMeta):
 
     def step(self, state, action):
         reward = self.get_reward(state, action)
-        print(state, action)
         next_state = self.get_next_state(state, action)
         
         return (reward, next_state, self.is_goal(next_state))
+    
+    def get_start_state(self):
+        pass

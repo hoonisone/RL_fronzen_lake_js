@@ -20,7 +20,6 @@ class GridEnv(Env):
     def __init__(self, map, reward_function = None, trasition_function = None):
         if GridEnv.check_map_validation(map) == False:
             raise Exception("invalid map")
-        
         self.map = map
         
         states = np.arange(0, map.size)
@@ -33,6 +32,9 @@ class GridEnv(Env):
             self.get_next_state = trasition_function
 
         super().__init__(states, actions)
+
+    def get_start_state(self):
+        return np.random.choice(self.start_states)
 
     def get_next_state(self, state, action):
         dx, dy = GridEnv.action_to_direction_dict[action]
@@ -49,6 +51,7 @@ class GridEnv(Env):
     def get_reward(self, state, action):
         next_state = self.get_next_state(state, action)
         x, y = self.state_to_coordinate(next_state)
+        
         return 1 if self.map[y][x] == StateType.GOAL else 0 # 목적지에 도착하면 1 아니면 0
 
     def is_out(self, x, y): # 좌표가 맵을 벗어났는지 체크
@@ -57,23 +60,39 @@ class GridEnv(Env):
     def is_goal(self, state):
         (x, y) = self.state_to_coordinate(state)
         return self.map[y][x] == StateType.GOAL
+    
+    @property
+    def map(self):
+        return self.__map
+    
+    @map.setter
+    def map(self, value):
+        self.__map = value
+        self.start_states = GridEnv.get_state_state(value)
 
+    @staticmethod
+    def get_state_state(map):
+        """
+            맵 에서 시작 지점(StateType.START) state를 모두 찾아 np.array로 반환한다.
+        """
+        map = map.reshape(-1)
+        return np.where(map == StateType.START)[0]
     
     @staticmethod
     def IS_OUT(map, x, y):
-        return not (0 <= y < map.shape[0] and 0 <= x < map.shape[1])
+        return (y < 0) or (map.shape[0] <= y) or (x < 0) or (map.shape[1]<=x)
     
     def state_to_coordinate(self, state): # 좌표 -> 상태 변환
-        y = state // self.height
-        x = state % self.height
+        y = state // self.width
+        x = state % self.width
         return x, y
 
     def coordinate_to_state(self, x, y): # 상태 -> 좌표 변환
-        return GridEnv.COORDINATE_TO_STATE(self.height, x, y)
+        return GridEnv.COORDINATE_TO_STATE(self.width, x, y)
     
     @staticmethod
-    def COORDINATE_TO_STATE(height, x, y):
-        return height * y + x
+    def COORDINATE_TO_STATE(width, x, y):
+        return width * y + x
     
     @property
     def height(self):
@@ -155,6 +174,7 @@ class RandomGridEnv(GridEnv):
 class GridMapLoader:
     file_path = Path(__file__).parent/"map"
 
+
     @staticmethod
     def load_map(map_name):
         df_map_dict =  pd.read_excel(GridMapLoader.file_path/f"{map_name}.xlsx", sheet_name=None,  header = None)
@@ -168,7 +188,7 @@ class GridMapLoader:
         df.fillna(StateType.Empty, inplace = True)
         df.replace("S", StateType.START, inplace = True)
         df.replace("G", StateType.GOAL, inplace = True)
-        df.replace("O", StateType.Obstacle, inplace = True)
+        df.replace("H", StateType.Obstacle, inplace = True)
         return df.to_numpy()
     
     def get_all_map_name(self):

@@ -1,28 +1,19 @@
-# sys.path.append({경로})
+import sys
+from pathlib import Path
+print()
+print(Path(__file__).parent.parent.absolute()/"rl")
+sys.path.append(Path(__file__).parent.parent.absolute()/"rl")
+print(sys.path)
+# import os
+# os.chdir('libs')
 
 from rl.env.grid import ChangingGridEnv
 from rl.agent import ProposedAgent
 from simulator import Simulator
 import json
-from pathlib import Path
 
 # map = Env.Grid.GridMapLoader().load_map("Dyna Q Test")
 # env = Env.Grid.GridEnv(map)
-
-args_no_planning = {
-    "planning_num":0,
-    "save_path":Path("./result/planning(0).json")
-}
-
-args_planning_10 = {
-    "planning_num":10,
-    "save_path":Path("./result/planning(10).json")
-}
-
-args_planning_20 = {
-    "planning_num":20,
-    "save_path":Path("./result/planning(20).json")
-}
 
 def test(args):
     env = ChangingGridEnv(map_name = "Dyna Q Test")
@@ -44,3 +35,10 @@ def test(args):
 
 test(no_planning_args)
 test(planning_args)
+
+
+for planning_num in range(0, 101, 10):
+    args_no_planning = {
+    "planning_num":planning_num,
+    "save_path":Path(f"./result/planning/{planning_num}.json")
+}

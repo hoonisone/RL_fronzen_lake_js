@@ -1,6 +1,6 @@
 from rl.env.grid import ChangingGridEnv
 from rl.agent import ProposedAgent
-import Demo
+import simulator
 
 import json
 from multi import *
@@ -15,7 +15,7 @@ def test(args):
     agent = ProposedAgent(env.states, env.actions)
     agent.use_forget = use_forget
     agent.forget_metric = forget_metric
-    demo = Demo.Demo(env, agent)
+    demo = simulator.Demo(env, agent)
     return demo.test_with_changing_map(episode_per_map = episode_per_map, verbose = verbose)
 
 def test_and_save(args):

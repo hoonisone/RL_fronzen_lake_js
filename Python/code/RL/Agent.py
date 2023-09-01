@@ -41,7 +41,7 @@ class ProposedAgent:
         self.forget_metric = [[2, 1]]
 
         # Policy
-        self.policy = policy.Policy(0.05, 0.0001)
+        self.policy = policy.Policy(0.05, 0.01)
 
         min_step_size = 0.05
         recent_buffer_size = 10
