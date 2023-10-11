@@ -215,7 +215,7 @@ class ChangingGridEnv(GridEnv):
     def map_num(self):
         return len(self.map_list)
 
-    def next_map(self):
+    def change(self): # 환경 변경
         self.map_idx += 1
         if self.map_idx == len(self.map_list):
             return False
