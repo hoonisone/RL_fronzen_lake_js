@@ -1,24 +1,136 @@
-from rl import policy, util
+from rl import util
+from rl.policy import *
 from rl.model import *
 import numpy as np
 import json
 from abc import *
 from rl.model import StateActionValue
 from rl.model import SeperableStateActionModel
-
+from omegaconf import OmegaConf
 class Agent(metaclass=ABCMeta):
     def __init__(self, states, actions):
         self.states = states
         self.actions = actions
 
     def start():
-        pass
+        pass    
 
     def step():
         pass
 
+
+
 class Dyna_Q_Plus(Agent):
-    pass
+    def __init__(self, states, actions, config):
+        # reward
+        self.default_reward = -0.03
+        self.curiosity_reward = 0.001
+        self.repeat_penalty = -0.01
+
+        # basic element
+        self.states = states
+        self.actions = actions
+        self.state_num = len(self.states)
+        self.action_num = len(self.actions)
+
+        self.past_state = None
+        self.past_action = None
+
+        self.finished = True
+
+        self.forget_metric = [[2, 1]]
+
+        # Policy
+        self.policy = Policy(config.policy_config)
+
+        min_step_size = 0.05
+
+        self.value = StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
+        self.model = SampleModel(config.model_buffer_size)
+        self.tau_value_table = ActionTauTable(self.states, self.actions)
+
+        self.planning_num = 100
+        self.gamma = config.gamma
+
+        self.planning_value_threshold = 0.1
+        self.forget_history = []
+
+        self.report = OmegaConf.create({
+            "total_step":0,
+            "total_episode":0,
+            "acc_reward":0,
+        })
+
+    def start(self, state):
+        self.finished = False
+        self.report.total_episode += 1
+        self.latest_step = 0
+        self.past_state = state
+        self.past_action = self.choose_action(state)
+        return self.past_action
+
+    def _step(self, state, action, reward, next_state, finished):
+        value = self.bootstrap_value(reward, next_state, finished)
+        self.value.update(state, action, value)
+        self.model.update((state, action, reward, next_state, finished))
+        self.planning()
+
+    def step(self, reward, state, finished):
+        reward += -0.001
+        self._step(self.past_state, self.past_action, reward, state, finished)
+
+        self.past_state = state
+        self.past_action = self.choose_action(self.past_state)
+
+        # update tau
+        self.tau_value_table.update(self.past_state, self.past_action)
+
+        self.report.acc_reward += reward
+        self.report.total_step += 1
+        
+        self.finished = finished
+        return self.past_action
+
+    def planning(self):
+        for _ in range(self.planning_num):
+            state, action, reward, next_state, finished = self.model.get_sample()
+            value = self.bootstrap_value(reward, next_state, finished)
+            self.value.update(state, action, value)
+
+    def get_state_e_value(self, state):
+        return self.action_state_value_manager.getStateValue(state)
+
+    def bootstrap_value(self, reward, next_state, finished):
+        next_return = 0 if finished else max(self.get_q_values_for_state(next_state))
+        cur_return = reward + self.gamma * next_return
+        return cur_return
+
+    def choose_action(self, state):
+        q_values = self.get_q_values_for_state(state)
+        tau = self.get_tau_values_for_state(state)
+        return self.policy.choose_action(self.actions, q_values, tau)
+
+    def get_q_values_for_state(self, state):
+        return np.array([self.value.get_value(state, action) for action in self.actions])
+    
+    def get_tau_values_for_state(self, state):
+        return self.tau_value_table.value_table[state]
+
+    def get_state_value(self, state):
+        q_values = self.get_q_values_for_state(state)
+        return max(q_values)
+
+    def get_state_value_map(self):
+        value_map = []
+        for state in self.agent.states:
+            value_map.append(self.get_state_value(state))
+        return value_map
+
+    def forget_model(self, state, action, next_state, model_difference):
+        for threshold, ratio in self.forget_metric:
+            if threshold < model_difference:
+                self.model.forget_by_state_action(state, action, ratio)
+
 
 class ProposedAgent:
     def __init__(self, states, actions):
@@ -41,12 +153,11 @@ class ProposedAgent:
         self.forget_metric = [[2, 1]]
 
         # Policy
-        self.policy = policy.Policy(0.05, 0.01)
+        self.policy = Policy({ "epsilon":0.1, "kappa":0.001, "mode":PolicyMode.Random})
 
         min_step_size = 0.05
         recent_buffer_size = 10
         old_buffer_size = 30
-
 
         self.value = StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
         self.recent_value = StateActionValue(state_num=self.state_num, action_num=self.action_num, min_step_size=min_step_size)
@@ -131,7 +242,7 @@ class ProposedAgent:
         return 0
 
     def bootstrap_value(self, reward, next_state, finished):
-        next_return = 0 if finished else max(self.get_action_values_for_state(next_state))
+        next_return = 0 if finished else max(self.get_q_values_for_state(next_state))
         cur_return = reward + self.gamma * next_return
         return cur_return
 
@@ -223,19 +334,19 @@ class ProposedAgent:
         return self.past_action
 
     def choose_action(self, state):
-        q_values = self.get_action_values_for_state(state)
+        q_values = self.get_q_values_for_state(state)
         tau = self.get_tau_values_for_state(state)
 
         return self.policy.choose_action(self.actions, q_values, tau)
 
-    def get_action_values_for_state(self, state):
+    def get_q_values_for_state(self, state):
         return np.array([self.value.get_value(state, action) for action in self.actions])
     
     def get_tau_values_for_state(self, state):
         return self.tau_value_table.value_table[state]
 
     def get_state_value(self, state):
-        q_values = self.get_action_values_for_state(state)
+        q_values = self.get_q_values_for_state(state)
         return max(q_values)
 
     def get_state_value_map(self):
